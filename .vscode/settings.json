@@ -10,6 +10,8 @@
     "editor.tabSize": 4,
     "files.trimTrailingWhitespace": true,
     "editor.renderWhitespace": "all",
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.indexing": true,
     "ruff.format.preview": false,
     "ruff.lint.select": ["ALL"],
     "ruff.lint.extendSelect": ["ALL"],

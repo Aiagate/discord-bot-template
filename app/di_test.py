@@ -1,24 +1,31 @@
+import asyncio
+import logging
+
 from injector import inject
-from mediator import Mediator, RequestHandler
+from mediator import Request, RequestHandler
 from repository import IOrderRepository, IUserRepository
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="[ %(levelname)-8s] %(asctime)s | %(name)-16s %(funcName)-16s| %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logging.getLogger("injector").setLevel(logging.INFO)
+logging.getLogger("mediator").setLevel(logging.DEBUG)
 
-class GetUserQuery:
-    def __init__(self, user_id: int, order_id: int) -> None:
-        self.user_id = user_id
-        self.order_id = order_id
-
-
-class GetUsersQuery:
-    def __init__(self, user_id: int, order_id: int) -> None:
-        self.user_id = user_id
-        self.order_id = order_id
+logger = logging.getLogger(__name__)
 
 
 class GetUserResult:
     def __init__(self, user_data: dict, order_data: dict) -> None:
         self.user = user_data
         self.order = order_data
+
+
+class GetUserQuery(Request[GetUserResult]):
+    def __init__(self, user_id: int, order_id: int) -> None:
+        self.user_id = user_id
+        self.order_id = order_id
 
 
 class GetUserHandler(RequestHandler[GetUserQuery, GetUserResult]):
@@ -31,15 +38,13 @@ class GetUserHandler(RequestHandler[GetUserQuery, GetUserResult]):
         self.user_repo = user_repo
         self.order_repo = order_repo
 
-    def handle(self, query: GetUserQuery) -> GetUserResult:
+    async def handle(self, query: GetUserQuery) -> GetUserResult:
         user = self.user_repo.get_user_by_id(query.user_id)
         order = self.order_repo.get_order_by_id(query.order_id)
+        await asyncio.sleep(1)
         return GetUserResult(user, order)
 
 
-# Mediator を使用してリクエストを送信
-query = GetUserQuery(user_id=1, order_id=100)
-result = Mediator.send(query)
-print(result.user)
-query2 = GetUsersQuery(user_id=1, order_id=100)
-result2 = Mediator.send(query2)
+# query = GetUserQuery(user_id=1, order_id=100)
+# result = Mediator.send(query)
+# print(result.user)
