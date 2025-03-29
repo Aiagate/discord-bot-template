@@ -1,0 +1,29 @@
+{
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+        },
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "editor.tabSize": 4,
+    "files.trimTrailingWhitespace": true,
+    "editor.renderWhitespace": "all",
+    "ruff.format.preview": false,
+    "ruff.lint.select": ["ALL"],
+    "ruff.lint.extendSelect": ["ALL"],
+    "ruff.lint.ignore": [
+        "T201",
+        "D100",
+        "D101",
+        "D102",
+        "D103",
+        "D107",
+        "D400",
+        "D415",
+        "E501",
+        "INP001",
+        "ERA001",
+    ]
+}
