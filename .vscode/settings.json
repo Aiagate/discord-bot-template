@@ -27,5 +27,10 @@
         "E501",
         "INP001",
         "ERA001",
-    ]
+    ],
+    "files.exclude": {
+        "**/.git": true,
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+    },
 }

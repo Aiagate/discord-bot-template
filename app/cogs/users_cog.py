@@ -1,6 +1,10 @@
-from di_test import GetUserQuery
+import logging
+
 from discord.ext import commands
 from mediator import Mediator
+from usecases.users import GetUserQuery
+
+logger = logging.getLogger(__name__)
 
 
 class UsersCog(commands.Cog, name="Users"):
