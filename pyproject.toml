@@ -8,6 +8,7 @@ dependencies = [
     "asyncio>=3.4.3",
     "discord-py>=2.5.2",
     "injector>=0.22.0",
+    "sqlmodel>=0.0.24",
 ]
 
 [dependency-groups]

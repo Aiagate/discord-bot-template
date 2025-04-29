@@ -69,7 +69,7 @@ __※現在製作中のプロジェクトです。予期せぬバグ、不具合
 1. 仮想環境を作成:
 
    ```bash
-   uv venv -p 3.10 .venv
+   uv venv -p 3.12 .venv
    source .venv/bin/activate  # Windows(PS)の場合は .venv\Scripts\activate
    ```
 
