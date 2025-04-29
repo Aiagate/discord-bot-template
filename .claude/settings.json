@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(./**/*)",
+      "Read(./**/*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(git checkout:*)",
+      "Bash(uv run:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv add:*)",
+      "Bash(uv remove:*)",
+      "Bash(tree:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "ccusage statusline"
+  }
+}

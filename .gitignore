@@ -61,6 +61,12 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# SQLite database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
 # Flask stuff:
 instance/
 .webassets-cache
@@ -101,9 +107,6 @@ ipython_config.py
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
 
-# uv
-uv.lock
-
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
 #pdm.lock
@@ -126,6 +129,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .venv
 env/
 venv/
@@ -147,6 +151,9 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# ruff linter
+.ruff_cache/
 
 # Pyre type checker
 .pyre/
