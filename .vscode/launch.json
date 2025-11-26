@@ -1,12 +1,13 @@
 {
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Debug Discord Bot",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/app/__main__.py",
-            "console": "integratedTerminal"
-        }
-    ]
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Discord Bot",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/app/__main__.py",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env.local"
+    }
+  ]
 }

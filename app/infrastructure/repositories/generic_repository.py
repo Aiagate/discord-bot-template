@@ -1,0 +1,138 @@
+"""Generic repository implementation for SQLModel."""
+
+import logging
+from datetime import UTC, datetime
+from typing import Any, TypeVar
+
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import SQLModel
+
+from app.core.result import Err, Ok, Result
+from app.domain.aggregates.user import User
+from app.domain.interfaces import IAuditable
+from app.infrastructure.orm_models.user_orm import UserORM
+from app.repository import RepositoryError, RepositoryErrorType
+
+T = TypeVar("T")
+logger = logging.getLogger(__name__)
+
+# Domain型 → ORM型のマッピング
+DOMAIN_TO_ORM_MAP: dict[type, type[SQLModel]] = {
+    User: UserORM,
+}
+
+
+def orm_to_domain(orm_instance: SQLModel) -> Any:
+    """Convert ORM model to domain aggregate.
+
+    For IAuditable entities, timestamps are automatically mapped.
+    """
+    if isinstance(orm_instance, UserORM):
+        return User(
+            id=orm_instance.id or 0,
+            name=orm_instance.name,
+            email=orm_instance.email,
+            created_at=orm_instance.created_at,
+            updated_at=orm_instance.updated_at,
+        )
+    raise ValueError(f"Unknown ORM type: {type(orm_instance)}")
+
+
+def domain_to_orm(domain_instance: Any) -> SQLModel:
+    """Convert domain aggregate to ORM model.
+
+    For IAuditable entities, timestamps are automatically mapped.
+    """
+    if isinstance(domain_instance, User):
+        return UserORM(
+            id=domain_instance.id if domain_instance.id != 0 else None,
+            name=domain_instance.name,
+            email=domain_instance.email,
+            created_at=domain_instance.created_at,
+            updated_at=domain_instance.updated_at,
+        )
+    raise ValueError(f"Unknown domain type: {type(domain_instance)}")
+
+
+class GenericRepository[T, K]:
+    """Generic repository implementation for SQLModel.
+
+    Type Parameters:
+        T: Entity type (e.g., User, Order)
+        K: Primary key type (e.g., int, str, UUID)
+    """
+
+    def __init__(
+        self, session: AsyncSession, entity_type: type[T], key_type: type[K]
+    ) -> None:
+        self._session = session
+        self._entity_type = entity_type
+        self._key_type = key_type
+
+        # Get ORM model class for this domain type
+        orm_type = DOMAIN_TO_ORM_MAP.get(entity_type)
+        if orm_type is None:
+            raise ValueError(f"No ORM mapping found for {entity_type}")
+        self._orm_type = orm_type
+
+    async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
+        """Get entity by ID."""
+        try:
+            statement = select(self._orm_type).where(self._orm_type.id == id)  # type: ignore[attr-defined]
+            result = await self._session.execute(statement)
+            orm_instance = result.scalar_one_or_none()
+
+            if orm_instance is None:
+                err = RepositoryError(
+                    type=RepositoryErrorType.NOT_FOUND,
+                    message=f"{self._entity_type.__name__} with id {id} not found",
+                )
+                return Err(err)
+
+            return Ok(orm_to_domain(orm_instance))
+        except SQLAlchemyError as e:
+            logger.exception("Database error occurred in get_by_id")
+            err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
+            return Err(err)
+
+    async def save(self, entity: T) -> Result[T, RepositoryError]:
+        """Save entity.
+
+        For IAuditable entities, automatically updates the updated_at timestamp
+        when updating existing entities.
+        """
+        try:
+            orm_instance = domain_to_orm(entity)
+
+            # IAuditableエンティティの場合、更新時にupdated_atを自動設定
+            is_update = orm_instance.id is not None  # type: ignore[attr-defined]
+            if is_update and isinstance(entity, IAuditable):
+                orm_instance.updated_at = datetime.now(UTC)  # type: ignore[attr-defined]
+
+            # Add or merge
+            if orm_instance.id is None:  # type: ignore[attr-defined]
+                self._session.add(orm_instance)
+                await self._session.flush()
+            else:
+                orm_instance = await self._session.merge(orm_instance)
+                await self._session.flush()
+
+            return Ok(orm_to_domain(orm_instance))
+        except SQLAlchemyError as e:
+            logger.exception("Database error occurred in save")
+            err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
+            return Err(err)
+
+    async def delete(self, id: K) -> Result[None, RepositoryError]:
+        """Delete entity by ID."""
+        try:
+            statement = sql_delete(self._orm_type).where(self._orm_type.id == id)  # type: ignore[attr-defined]
+            await self._session.execute(statement)
+            return Ok(None)
+        except SQLAlchemyError as e:
+            logger.exception("Database error occurred in delete")
+            err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
+            return Err(err)
