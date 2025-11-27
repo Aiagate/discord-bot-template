@@ -4,27 +4,30 @@ import pytest
 
 from app.core.result import Ok
 from app.domain.aggregates.user import User
+from app.domain.value_objects import UserId
 from app.repository import IUnitOfWork
 
 
 @pytest.mark.anyio
 async def test_uow_rollback(uow: IUnitOfWork) -> None:
     """Test that the Unit of Work rolls back transactions on error."""
-    user = User(id=0, name="Rollback Test", email="rollback@example.com")
+    user = User(
+        id=UserId.generate(), name="Rollback Test", email="rollback@example.com"
+    )
     initial_user = None
 
     # 1. Save a user and get its ID
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User, UserId)
         save_result = await repo.save(user)
         assert isinstance(save_result, Ok)
         initial_user = save_result.value
-        assert initial_user.id != 0
+        assert initial_user.id  # ULID should exist
 
     # 2. Attempt to update the user in a failing transaction
     try:
         async with uow:
-            repo = uow.GetRepository(User, int)
+            repo = uow.GetRepository(User, UserId)
             get_result = await repo.get_by_id(initial_user.id)
             assert isinstance(get_result, Ok)
             user_to_update = get_result.value
@@ -37,7 +40,7 @@ async def test_uow_rollback(uow: IUnitOfWork) -> None:
 
     # 3. Verify that the name was NOT updated
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User, UserId)
         retrieved_result = await repo.get_by_id(initial_user.id)
         assert isinstance(retrieved_result, Ok)
         retrieved_user = retrieved_result.value

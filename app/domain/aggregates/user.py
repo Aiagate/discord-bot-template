@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from app.domain.value_objects import UserId
+
 
 @dataclass
 class User:
@@ -11,7 +13,7 @@ class User:
     automatically manages created_at and updated_at.
     """
 
-    id: int
+    id: UserId
     name: str
     email: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

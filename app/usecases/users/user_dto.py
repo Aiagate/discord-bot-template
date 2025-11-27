@@ -7,6 +7,6 @@ from dataclasses import dataclass
 class UserDTO:
     """A plain data structure representing a user."""
 
-    id: int
+    id: str
     name: str
     email: str
