@@ -13,7 +13,7 @@ from sqlmodel import SQLModel
 from app.core.result import Err, Ok, Result
 from app.domain.aggregates.user import User
 from app.domain.interfaces import IAuditable, IValueObject
-from app.domain.value_objects import UserId
+from app.domain.value_objects import Email, UserId
 from app.infrastructure.orm_models.user_orm import UserORM
 from app.repository import RepositoryError, RepositoryErrorType
 
@@ -38,10 +38,12 @@ def orm_to_domain(orm_instance: SQLModel) -> Any:
             if orm_instance.id
             else UserId.generate()
         )
+        # Parse email string from database to Email using IValueObject protocol
+        email = Email.from_primitive(orm_instance.email)
         return User(
             id=user_id,
             name=orm_instance.name,
-            email=orm_instance.email,
+            email=email,
             created_at=orm_instance.created_at,
             updated_at=orm_instance.updated_at,
         )
@@ -58,10 +60,12 @@ def domain_to_orm(domain_instance: Any) -> SQLModel:
         # For new entities (insert), set id to None to let DB generate
         # For existing entities (update), use the ULID string
         id_str = domain_instance.id.to_primitive()
+        # Convert Email to string for database storage using IValueObject protocol
+        email_str = domain_instance.email.to_primitive()
         return UserORM(
             id=id_str,
             name=domain_instance.name,
-            email=domain_instance.email,
+            email=email_str,
             created_at=domain_instance.created_at,
             updated_at=domain_instance.updated_at,
         )

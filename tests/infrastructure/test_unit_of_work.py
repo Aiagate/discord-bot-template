@@ -4,7 +4,7 @@ import pytest
 
 from app.core.result import Ok
 from app.domain.aggregates.user import User
-from app.domain.value_objects import UserId
+from app.domain.value_objects import Email, UserId
 from app.repository import IUnitOfWork
 
 
@@ -12,7 +12,9 @@ from app.repository import IUnitOfWork
 async def test_uow_rollback(uow: IUnitOfWork) -> None:
     """Test that the Unit of Work rolls back transactions on error."""
     user = User(
-        id=UserId.generate(), name="Rollback Test", email="rollback@example.com"
+        id=UserId.generate(),
+        name="Rollback Test",
+        email=Email.from_primitive("rollback@example.com"),
     )
     initial_user = None
 

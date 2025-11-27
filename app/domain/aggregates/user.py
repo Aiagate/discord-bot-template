@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from app.domain.value_objects import UserId
+from app.domain.value_objects import Email, UserId
 
 
 @dataclass
@@ -15,7 +15,7 @@ class User:
 
     id: UserId
     name: str
-    email: str
+    email: Email
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -24,7 +24,7 @@ class User:
         if not self.name:
             raise ValueError("User name cannot be empty.")
 
-    def change_email(self, new_email: str) -> "User":
+    def change_email(self, new_email: Email) -> "User":
         """メールアドレスを変更するドメインロジック
 
         Note: updated_at is automatically managed by the repository layer.

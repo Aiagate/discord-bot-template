@@ -4,7 +4,7 @@ import pytest
 
 from app.core.result import Err, Ok
 from app.domain.aggregates.user import User
-from app.domain.value_objects import UserId
+from app.domain.value_objects import Email, UserId
 from app.repository import IUnitOfWork
 from app.usecases.result import ErrorType
 from app.usecases.users.get_user import GetUserHandler, GetUserQuery
@@ -17,7 +17,11 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
     saved_user = None
     async with uow:
         repo = uow.GetRepository(User, str)
-        user = User(id=UserId.generate(), name="Bob", email="bob@example.com")
+        user = User(
+            id=UserId.generate(),
+            name="Bob",
+            email=Email.from_primitive("bob@example.com"),
+        )
         save_result = await repo.save(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value

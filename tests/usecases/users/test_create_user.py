@@ -37,3 +37,17 @@ async def test_create_user_handler_validation_error(uow: IUnitOfWork) -> None:
 
     assert isinstance(result, Err)
     assert result.error.type == ErrorType.VALIDATION_ERROR
+
+
+@pytest.mark.anyio
+async def test_create_user_handler_invalid_email(uow: IUnitOfWork) -> None:
+    """Test CreateUserHandler returns Err on invalid email format."""
+    handler = CreateUserHandler(uow)
+
+    # Command with an invalid email format
+    command = CreateUserCommand(name="Test User", email="invalid-email")
+    result = await handler.handle(command)
+
+    assert isinstance(result, Err)
+    assert result.error.type == ErrorType.VALIDATION_ERROR
+    assert "Invalid email format" in result.error.message

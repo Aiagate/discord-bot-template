@@ -50,7 +50,9 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
                 case Ok(user):
                     logger.debug("GetUserHandler: user=%s", user)
                     user_dto = UserDTO(
-                        id=user.id.to_primitive(), name=user.name, email=user.email
+                        id=user.id.to_primitive(),
+                        name=user.name,
+                        email=user.email.to_primitive(),
                     )
                     return Ok(GetUserResult(user_dto))
                 case Err(repo_error):

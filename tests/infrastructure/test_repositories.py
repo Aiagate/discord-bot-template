@@ -7,7 +7,7 @@ import pytest
 
 from app.core.result import Err, Ok
 from app.domain.aggregates.user import User
-from app.domain.value_objects import UserId
+from app.domain.value_objects import Email, UserId
 from app.repository import IUnitOfWork
 
 
@@ -25,7 +25,11 @@ async def test_repository_get_non_existent_raises_error(uow: IUnitOfWork) -> Non
 @pytest.mark.anyio
 async def test_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting an entity via the repository."""
-    user = User(id=UserId.generate(), name="ToDelete", email="delete@example.com")
+    user = User(
+        id=UserId.generate(),
+        name="ToDelete",
+        email=Email.from_primitive("delete@example.com"),
+    )
     saved_user_result = None
 
     # 1. Create user
@@ -55,7 +59,9 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     before_creation = datetime.now(UTC)
 
     user = User(
-        id=UserId.generate(), name="TimestampTest", email="timestamp@example.com"
+        id=UserId.generate(),
+        name="TimestampTest",
+        email=Email.from_primitive("timestamp@example.com"),
     )
 
     async with uow:
@@ -75,7 +81,11 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 @pytest.mark.anyio
 async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing entity."""
-    user = User(id=UserId.generate(), name="UpdateTest", email="update@example.com")
+    user = User(
+        id=UserId.generate(),
+        name="UpdateTest",
+        email=Email.from_primitive("update@example.com"),
+    )
 
     async with uow:
         repo = uow.GetRepository(User)  # IRepository[User] - save only
@@ -86,7 +96,7 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
 
     await asyncio.sleep(0.01)
 
-    saved_user.email = "updated@example.com"
+    saved_user.email = Email.from_primitive("updated@example.com")
 
     async with uow:
         repo = uow.GetRepository(User)  # IRepository[User] - save only
