@@ -27,11 +27,13 @@ dev = [
 ]
 
 [tool.coverage.run]
-source = ["app", "tests"]
+source = ["app"]
 
 [tool.coverage.report]
 precision = 2
 show_missing = true
+skip_empty = true
+fail_under = 75
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

@@ -9,7 +9,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from app.cogs import users_cog
+from app.cogs import teams_cog, users_cog
 
 
 class MyBot(commands.Bot):
@@ -32,6 +32,7 @@ class MyBot(commands.Bot):
         await create_db_and_tables()
 
     async def load_cogs(self) -> None:
+        await self.load_extension(teams_cog.__name__)
         await self.load_extension(users_cog.__name__)
 
 
