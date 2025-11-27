@@ -6,7 +6,7 @@ from injector import inject
 
 from app.core.result import Err, Ok, Result
 from app.domain.aggregates.user import User
-from app.domain.value_objects import UserId
+from app.domain.value_objects import Email, UserId
 from app.mediator import Request, RequestHandler
 from app.repository import IUnitOfWork
 from app.usecases.result import ErrorType, UseCaseError
@@ -44,7 +44,8 @@ class CreateUserHandler(
     ) -> Result[CreateUserResult, UseCaseError]:
         """Create new user and return as DTO within a Result."""
         try:
-            user = User(id=UserId.generate(), name=request.name, email=request.email)
+            email = Email.from_primitive(request.email)
+            user = User(id=UserId.generate(), name=request.name, email=email)
         except ValueError as e:
             # Handle potential validation errors from the domain
             error = UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
@@ -60,7 +61,7 @@ class CreateUserHandler(
                     user_dto = UserDTO(
                         id=saved_user.id.to_primitive(),
                         name=saved_user.name,
-                        email=saved_user.email,
+                        email=saved_user.email.to_primitive(),
                     )
                     return Ok(CreateUserResult(user_dto))
                 case Err(repo_error):
