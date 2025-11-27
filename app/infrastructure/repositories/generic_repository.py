@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
 
 from app.core.result import Err, Ok, Result
+from app.domain.aggregates.team import Team
 from app.domain.aggregates.user import User
 from app.domain.interfaces import IAuditable, IValueObject
-from app.domain.value_objects import Email, UserId
+from app.domain.value_objects import Email, TeamId, TeamName, UserId
+from app.infrastructure.orm_models.team_orm import TeamORM
 from app.infrastructure.orm_models.user_orm import UserORM
 from app.repository import RepositoryError, RepositoryErrorType
 
@@ -22,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Domain型 → ORM型のマッピング
 DOMAIN_TO_ORM_MAP: dict[type, type[SQLModel]] = {
+    Team: TeamORM,
     User: UserORM,
 }
 
@@ -31,6 +34,21 @@ def orm_to_domain(orm_instance: SQLModel) -> Any:
 
     For IAuditable entities, timestamps are automatically mapped.
     """
+    if isinstance(orm_instance, TeamORM):
+        # Parse ULID string from database to TeamId using IValueObject protocol
+        team_id = (
+            TeamId.from_primitive(orm_instance.id)
+            if orm_instance.id
+            else TeamId.generate()
+        )
+        # Parse team name string from database to TeamName using IValueObject protocol
+        team_name = TeamName.from_primitive(orm_instance.name)
+        return Team(
+            id=team_id,
+            name=team_name,
+            created_at=orm_instance.created_at,
+            updated_at=orm_instance.updated_at,
+        )
     if isinstance(orm_instance, UserORM):
         # Parse ULID string from database to UserId using IValueObject protocol
         user_id = (
@@ -55,6 +73,17 @@ def domain_to_orm(domain_instance: Any) -> SQLModel:
 
     For IAuditable entities, timestamps are automatically mapped.
     """
+    if isinstance(domain_instance, Team):
+        # Convert TeamId to string for database storage using IValueObject protocol
+        id_str = domain_instance.id.to_primitive()
+        # Convert TeamName to string for database storage using IValueObject protocol
+        name_str = domain_instance.name.to_primitive()
+        return TeamORM(
+            id=id_str,
+            name=name_str,
+            created_at=domain_instance.created_at,
+            updated_at=domain_instance.updated_at,
+        )
     if isinstance(domain_instance, User):
         # Convert UserId to string for database storage using IValueObject protocol
         # For new entities (insert), set id to None to let DB generate

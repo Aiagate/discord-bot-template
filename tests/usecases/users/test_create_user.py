@@ -1,9 +1,11 @@
 """Tests for Create User use case."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from app.core.result import Err, Ok
-from app.repository import IUnitOfWork
+from app.repository import IUnitOfWork, RepositoryError, RepositoryErrorType
 from app.usecases.result import ErrorType
 from app.usecases.users.create_user import (
     CreateUserCommand,
@@ -51,3 +53,33 @@ async def test_create_user_handler_invalid_email(uow: IUnitOfWork) -> None:
     assert isinstance(result, Err)
     assert result.error.type == ErrorType.VALIDATION_ERROR
     assert "Invalid email format" in result.error.message
+
+
+@pytest.mark.anyio
+async def test_create_user_handler_repository_error() -> None:
+    """Test CreateUserHandler returns Err when repository fails."""
+    # Create a mock UnitOfWork that simulates repository error
+    mock_uow = MagicMock(spec=IUnitOfWork)
+    mock_repo = MagicMock()
+
+    # Mock the repository to return an Err
+    mock_repo.save = AsyncMock(
+        return_value=Err(
+            RepositoryError(
+                type=RepositoryErrorType.UNEXPECTED,
+                message="Database connection failed",
+            )
+        )
+    )
+
+    mock_uow.GetRepository.return_value = mock_repo
+    mock_uow.__aenter__ = AsyncMock(return_value=mock_uow)
+    mock_uow.__aexit__ = AsyncMock(return_value=None)
+
+    handler = CreateUserHandler(mock_uow)
+    command = CreateUserCommand(name="Test User", email="test@example.com")
+    result = await handler.handle(command)
+
+    assert isinstance(result, Err)
+    assert result.error.type == ErrorType.UNEXPECTED
+    assert "Database connection failed" in result.error.message
