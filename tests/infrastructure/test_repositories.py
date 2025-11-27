@@ -7,6 +7,7 @@ import pytest
 
 from app.core.result import Err, Ok
 from app.domain.aggregates.user import User
+from app.domain.value_objects import UserId
 from app.repository import IUnitOfWork
 
 
@@ -14,34 +15,36 @@ from app.repository import IUnitOfWork
 async def test_repository_get_non_existent_raises_error(uow: IUnitOfWork) -> None:
     """Test that getting a non-existent entity returns an Err."""
     async with uow:
-        repo = uow.GetRepository(User, int)
-        result = await repo.get_by_id(99999)
+        repo = uow.GetRepository(User, UserId)
+        result = await repo.get_by_id(
+            UserId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV")
+        )
         assert isinstance(result, Err)
 
 
 @pytest.mark.anyio
 async def test_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting an entity via the repository."""
-    user = User(id=0, name="ToDelete", email="delete@example.com")
+    user = User(id=UserId.generate(), name="ToDelete", email="delete@example.com")
     saved_user_result = None
 
     # 1. Create user
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User, UserId)
         saved_user_result = await repo.save(user)
         assert isinstance(saved_user_result, Ok)
         saved_user = saved_user_result.value
-        assert saved_user.id != 0
+        assert saved_user.id  # ULID should exist
 
     # 2. Delete user
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User, UserId)
         delete_result = await repo.delete(saved_user.id)
         assert isinstance(delete_result, Ok)
 
     # 3. Verify user is deleted
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User, UserId)
         get_result = await repo.get_by_id(saved_user.id)
         assert isinstance(get_result, Err)
 
@@ -51,10 +54,12 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     """Test that repository correctly saves and retrieves timestamps."""
     before_creation = datetime.now(UTC)
 
-    user = User(id=0, name="TimestampTest", email="timestamp@example.com")
+    user = User(
+        id=UserId.generate(), name="TimestampTest", email="timestamp@example.com"
+    )
 
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User)  # IRepository[User] - save only
         save_result = await repo.save(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
@@ -70,10 +75,10 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 @pytest.mark.anyio
 async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing entity."""
-    user = User(id=0, name="UpdateTest", email="update@example.com")
+    user = User(id=UserId.generate(), name="UpdateTest", email="update@example.com")
 
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User)  # IRepository[User] - save only
         save_result = await repo.save(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
@@ -84,7 +89,7 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     saved_user.email = "updated@example.com"
 
     async with uow:
-        repo = uow.GetRepository(User, int)
+        repo = uow.GetRepository(User)  # IRepository[User] - save only
         update_result = await repo.save(saved_user)
         assert isinstance(update_result, Ok)
         updated_user = update_result.value

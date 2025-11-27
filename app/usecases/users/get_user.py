@@ -6,6 +6,7 @@ from injector import inject
 
 from app.core.result import Err, Ok, Result
 from app.domain.aggregates.user import User
+from app.domain.value_objects import UserId
 from app.mediator import Request, RequestHandler
 from app.repository import IUnitOfWork
 from app.usecases.result import ErrorType, UseCaseError
@@ -24,7 +25,7 @@ class GetUserResult:
 class GetUserQuery(Request[Result[GetUserResult, UseCaseError]]):
     """Query to get user by ID."""
 
-    def __init__(self, user_id: int) -> None:
+    def __init__(self, user_id: str) -> None:
         self.user_id = user_id
 
 
@@ -40,13 +41,17 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
     ) -> Result[GetUserResult, UseCaseError]:
         """Get user by ID, returning a DTO within a Result."""
         async with self._uow:
-            user_repo = self._uow.GetRepository(User, int)
-            user_result = await user_repo.get_by_id(request.user_id)
+            user_repo = self._uow.GetRepository(User, UserId)
+            user_result = await user_repo.get_by_id(
+                UserId.from_primitive(request.user_id)
+            )
 
             match user_result:
                 case Ok(user):
                     logger.debug("GetUserHandler: user=%s", user)
-                    user_dto = UserDTO(id=user.id, name=user.name, email=user.email)
+                    user_dto = UserDTO(
+                        id=user.id.to_primitive(), name=user.name, email=user.email
+                    )
                     return Ok(GetUserResult(user_dto))
                 case Err(repo_error):
                     logger.error("Repository error in GetUserHandler: %s", repo_error)

@@ -12,7 +12,8 @@ from sqlmodel import SQLModel
 
 from app.core.result import Err, Ok, Result
 from app.domain.aggregates.user import User
-from app.domain.interfaces import IAuditable
+from app.domain.interfaces import IAuditable, IValueObject
+from app.domain.value_objects import UserId
 from app.infrastructure.orm_models.user_orm import UserORM
 from app.repository import RepositoryError, RepositoryErrorType
 
@@ -31,8 +32,14 @@ def orm_to_domain(orm_instance: SQLModel) -> Any:
     For IAuditable entities, timestamps are automatically mapped.
     """
     if isinstance(orm_instance, UserORM):
+        # Parse ULID string from database to UserId using IValueObject protocol
+        user_id = (
+            UserId.from_primitive(orm_instance.id)
+            if orm_instance.id
+            else UserId.generate()
+        )
         return User(
-            id=orm_instance.id or 0,
+            id=user_id,
             name=orm_instance.name,
             email=orm_instance.email,
             created_at=orm_instance.created_at,
@@ -47,8 +54,12 @@ def domain_to_orm(domain_instance: Any) -> SQLModel:
     For IAuditable entities, timestamps are automatically mapped.
     """
     if isinstance(domain_instance, User):
+        # Convert UserId to string for database storage using IValueObject protocol
+        # For new entities (insert), set id to None to let DB generate
+        # For existing entities (update), use the ULID string
+        id_str = domain_instance.id.to_primitive()
         return UserORM(
-            id=domain_instance.id if domain_instance.id != 0 else None,
+            id=id_str,
             name=domain_instance.name,
             email=domain_instance.email,
             created_at=domain_instance.created_at,
@@ -60,17 +71,19 @@ def domain_to_orm(domain_instance: Any) -> SQLModel:
 class GenericRepository[T, K]:
     """Generic repository implementation for SQLModel.
 
+    Implements both IRepository[T] and IRepositoryWithId[T, K].
+
     Type Parameters:
         T: Entity type (e.g., User, Order)
-        K: Primary key type (e.g., int, str, UUID)
+        K: Primary key type (e.g., int, str, UserId) - can be None for save-only repos
     """
 
     def __init__(
-        self, session: AsyncSession, entity_type: type[T], key_type: type[K]
+        self, session: AsyncSession, entity_type: type[T], key_type: type[K] | None
     ) -> None:
         self._session = session
         self._entity_type = entity_type
-        self._key_type = key_type
+        self._key_type = key_type  # Can be None for save-only repositories
 
         # Get ORM model class for this domain type
         orm_type = DOMAIN_TO_ORM_MAP.get(entity_type)
@@ -81,7 +94,13 @@ class GenericRepository[T, K]:
     async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
         """Get entity by ID."""
         try:
-            statement = select(self._orm_type).where(self._orm_type.id == id)  # type: ignore[attr-defined]
+            # Convert value object to primitive type for database query
+            id_value = (
+                id.to_primitive()  # type: ignore[attr-defined]
+                if isinstance(id, IValueObject)
+                else id
+            )
+            statement = select(self._orm_type).where(self._orm_type.id == id_value)  # type: ignore[attr-defined]
             result = await self._session.execute(statement)
             orm_instance = result.scalar_one_or_none()
 
@@ -129,7 +148,13 @@ class GenericRepository[T, K]:
     async def delete(self, id: K) -> Result[None, RepositoryError]:
         """Delete entity by ID."""
         try:
-            statement = sql_delete(self._orm_type).where(self._orm_type.id == id)  # type: ignore[attr-defined]
+            # Convert value object to primitive type for database query
+            id_value = (
+                id.to_primitive()  # type: ignore[attr-defined]
+                if isinstance(id, IValueObject)
+                else id
+            )
+            statement = sql_delete(self._orm_type).where(self._orm_type.id == id_value)  # type: ignore[attr-defined]
             await self._session.execute(statement)
             return Ok(None)
         except SQLAlchemyError as e:

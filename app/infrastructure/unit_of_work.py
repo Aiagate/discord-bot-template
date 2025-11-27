@@ -1,11 +1,11 @@
 """SQLAlchemy Unit of Work implementation."""
 
-from typing import Any
+from typing import Any, overload
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.infrastructure.repositories.generic_repository import GenericRepository
-from app.repository import IRepository, IUnitOfWork
+from app.repository import IRepository, IRepositoryWithId, IUnitOfWork
 
 
 class SQLAlchemyUnitOfWork(IUnitOfWork):
@@ -14,19 +14,32 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
-        self._repositories: dict[tuple[type, type], Any] = {}
+        self._repositories: dict[tuple[type, ...], Any] = {}
 
+    @overload
+    def GetRepository[T](self, entity_type: type[T]) -> IRepository[T]: ...
+
+    @overload
     def GetRepository[T, K](
         self, entity_type: type[T], key_type: type[K]
-    ) -> IRepository[T, K]:
-        """Get repository for entity type with specified key type."""
+    ) -> IRepositoryWithId[T, K]: ...
+
+    def GetRepository[T, K](
+        self, entity_type: type[T], key_type: type[K] | None = None
+    ) -> IRepository[T] | IRepositoryWithId[T, K]:
+        """Get repository for entity type.
+
+        Overloaded method:
+        - GetRepository(User) -> IRepository[User] (save only)
+        - GetRepository(User, UserId) -> IRepositoryWithId[User, UserId] (all ops)
+        """
         if self._session is None:
             raise RuntimeError(
                 "UnitOfWork session not initialized. Use 'async with' context."
             )
 
-        # Use tuple of (entity_type, key_type) as cache key
-        cache_key = (entity_type, key_type)
+        # Cache key includes key_type if provided
+        cache_key = (entity_type, key_type) if key_type else (entity_type,)
 
         # Return cached repository if exists
         if cache_key in self._repositories:

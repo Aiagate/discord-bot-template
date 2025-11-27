@@ -30,7 +30,7 @@ class UsersCog(commands.Cog, name="Users"):
     async def users_get(
         self,
         ctx: commands.Context[commands.Bot],
-        user_id: int,
+        user_id: str,
     ) -> None:
         """Get user by ID. Usage: !users get <user_id>"""
         query = GetUserQuery(user_id=user_id)

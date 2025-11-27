@@ -20,7 +20,8 @@ async def test_create_user_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert isinstance(result, Ok)
-    assert result.value.user.id != 0
+    assert result.value.user.id  # ULID string should exist
+    assert len(result.value.user.id) == 26  # ULID is 26 characters
     assert result.value.user.name == "Alice"
     assert result.value.user.email == "alice@example.com"
 
