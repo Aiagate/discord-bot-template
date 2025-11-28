@@ -212,6 +212,12 @@ match result:
 2. **Result クラス**: レスポンス
 3. **Handler クラス**: 処理ロジック
 
+**重要な設計原則**: Create系のユースケースは作成したエンティティのIDのみを返し、詳細情報の取得はGet系のユースケースに委譲します。これにより以下のSOLID原則がより厳密に守られます：
+
+- **単一責任の原則（SRP）**: Createは「エンティティの作成」、Getは「エンティティの詳細取得」という明確な単一責任を持つ
+- **開放閉鎖の原則（OCP）**: 表示ロジックをGetに一元化することで、表示形式の変更時に既存のCreateコードを変更する必要がない
+- **インターフェース分離の原則（ISP）**: Createは最小限の情報（ID）のみを返し、クライアントに不要な情報を公開しない
+
 `app/usecases/users/get_user.py`:
 
 ```python
@@ -258,6 +264,71 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
 - **DTO（Data Transfer Object）**: プレゼンテーション層との境界
 - **依存性注入**: `@inject` デコレータで IUnitOfWork を注入
 - **トランザクション**: `async with self._uow` でトランザクション管理
+
+`app/usecases/users/create_user.py` (Command例):
+
+```python
+# 1. Command（リクエスト）
+class CreateUserCommand(Request[Result[CreateUserResult, UseCaseError]]):
+    def __init__(self, name: str, email: str) -> None:
+        self.name = name
+        self.email = email
+
+# 2. Result（レスポンス）- IDのみを返す
+class CreateUserResult:
+    def __init__(self, user_id: str) -> None:
+        self.user_id = user_id
+
+# 3. Handler（処理ロジック）
+class CreateUserHandler(RequestHandler[CreateUserCommand, Result[CreateUserResult, UseCaseError]]):
+    @inject
+    def __init__(self, uow: IUnitOfWork) -> None:
+        self._uow = uow
+
+    async def handle(self, request: CreateUserCommand) -> Result[CreateUserResult, UseCaseError]:
+        # エンティティ作成
+        user = User(id=UserId.generate(), name=request.name, email=Email.from_primitive(request.email))
+
+        async with self._uow:
+            user_repo = self._uow.GetRepository(User)
+            save_result = await user_repo.add(user)
+
+            match save_result:
+                case Ok(saved_user):
+                    # IDのみを返す
+                    return Ok(CreateUserResult(saved_user.id.to_primitive()))
+                case Err(repo_error):
+                    return Err(UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message))
+```
+
+**Createの設計パターン**: Create系のユースケースはIDのみを返します。プレゼンテーション層（Cog）では、返されたIDを使ってGetユースケースを呼び出すことで、詳細情報を取得します：
+
+```python
+# app/cogs/users_cog.py
+@users.command(name="create")
+async def users_create(self, ctx: commands.Context[commands.Bot], name: str, email: str) -> None:
+    # 1. Createを実行してIDを取得
+    command = CreateUserCommand(name=name, email=email)
+    result = await Mediator.send_async(command)
+
+    match result:
+        case Ok(ok_value):
+            # 2. 返されたIDでGetを実行
+            query = GetUserQuery(user_id=ok_value.user_id)
+            get_result = await Mediator.send_async(query)
+
+            match get_result:
+                case Ok(get_ok_value):
+                    # 3. 結果を表示（表示ロジックがGetに一元化される）
+                    message = f"User Created:\nID: {get_ok_value.user.id}\nName: {get_ok_value.user.name}\n..."
+                    await ctx.send(content=message)
+```
+
+この設計により：
+- Createは「作成してIDを返す」という単一責任に専念
+- Getは「詳細情報の取得と形式化」という単一責任に専念
+- 結果の表示形式を変更する場合、Getの実装のみを変更すればよい（OCP）
+- テストが容易（各ユースケースを独立してテスト可能）
 
 ##### 2.2 Mediator Pattern（メディエーターパターン）
 
@@ -690,21 +761,37 @@ class UsersCog(commands.Cog):
 3. Mediator.send_async()
    ↓
 4. CreateUserHandler.handle()
-   ↓ User(id=0, name="Alice", email="alice@...")
+   ↓ User(id=UserId.generate(), name="Alice", email="alice@...")
 5. Domain validation (__post_init__)
    ↓
 6. IUnitOfWork
    ↓
-7. GenericRepository.save()
-   ↓ domain_to_orm()
+7. GenericRepository.add()
+   ↓ entity_to_orm_dict()
 8. UserORM
    ↓ INSERT INTO users ...
 9. Database
    ↓ Commit transaction
-10. Ok(CreateUserResult(UserDTO))
+10. Ok(CreateUserResult(user_id="01HQXYZ..."))
+    ↓ IDのみを返す
+11. UsersCog.users_create()
+    ↓ GetUserQuery(user_id="01HQXYZ...")
+12. Mediator.send_async()
     ↓
-11. Discord User (receives success message)
+13. GetUserHandler.handle()
+    ↓ GenericRepository.get_by_id()
+14. Database
+    ↓ SELECT * FROM users WHERE id = '01HQXYZ...'
+15. UserORM → User (Domain)
+    ↓ orm_to_entity()
+16. User → UserDTO
+    ↓ Ok(GetUserResult(UserDTO))
+17. UsersCog formats message
+    ↓
+18. Discord User (receives formatted success message)
 ```
+
+**重要**: Create操作は作成したエンティティのIDのみを返します。詳細情報の取得は必ずGet操作を経由することで、表示ロジックが一元化され、SOLID原則（特にSRPとOCP）が守られます。
 
 ---
 

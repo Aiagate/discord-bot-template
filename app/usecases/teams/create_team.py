@@ -10,7 +10,6 @@ from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId, TeamName
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
-from app.usecases.teams.team_dto import TeamDTO
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,8 @@ logger = logging.getLogger(__name__)
 class CreateTeamResult:
     """Result object for CreateTeam command."""
 
-    def __init__(self, team: TeamDTO) -> None:
-        self.team = team
+    def __init__(self, team_id: str) -> None:
+        self.team_id = team_id
 
 
 class CreateTeamCommand(Request[Result[CreateTeamResult, UseCaseError]]):
@@ -51,17 +50,14 @@ class CreateTeamHandler(
             return Err(error)
 
         async with self._uow:
-            team_repo = self._uow.GetRepository(Team)  # IRepository[Team] - add only
+            team_repo = self._uow.GetRepository(Team)
             save_result = await team_repo.add(team)
 
             match save_result:
                 case Ok(saved_team):
                     logger.info("Created team: %s", saved_team)
-                    team_dto = TeamDTO(
-                        id=saved_team.id.to_primitive(),
-                        name=saved_team.name.to_primitive(),
-                    )
-                    return Ok(CreateTeamResult(team_dto))
+                    team_id = saved_team.id.to_primitive()
+                    return Ok(CreateTeamResult(team_id))
                 case Err(repo_error):
                     logger.error(
                         "Repository error in CreateTeamHandler: %s", repo_error

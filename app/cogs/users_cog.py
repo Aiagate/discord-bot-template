@@ -62,13 +62,24 @@ class UsersCog(commands.Cog, name="Users"):
 
         match result:
             case Ok(ok_value):
-                message = (
-                    f"User Created:\n"
-                    f"ID: {ok_value.user.id}\n"
-                    f"Name: {ok_value.user.name}\n"
-                    f"Email: {ok_value.user.email}"
-                )
-                await ctx.send(content=message)
+                user_id = ok_value.user_id
+                query = GetUserQuery(user_id=user_id)
+                get_result = await Mediator.send_async(query)
+
+                match get_result:
+                    case Ok(get_ok_value):
+                        message = (
+                            f"User Created:\n"
+                            f"ID: {get_ok_value.user.id}\n"
+                            f"Name: {get_ok_value.user.name}\n"
+                            f"Email: {get_ok_value.user.email}"
+                        )
+                        await ctx.send(content=message)
+                    case Err(get_err_value):
+                        logger.error(
+                            "Failed to get created user: %s", get_err_value.message
+                        )
+                        await ctx.send(f"Error: {get_err_value.message}")
             case Err(err_value):
                 logger.error("Failed to create user: %s", err_value.message)
                 await ctx.send(f"Error: {err_value.message}")
