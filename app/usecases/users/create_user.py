@@ -52,8 +52,8 @@ class CreateUserHandler(
             return Err(error)
 
         async with self._uow:
-            user_repo = self._uow.GetRepository(User)  # IRepository[User] - save only
-            save_result = await user_repo.save(user)
+            user_repo = self._uow.GetRepository(User)  # IRepository[User] - add only
+            save_result = await user_repo.add(user)
 
             match save_result:
                 case Ok(saved_user):

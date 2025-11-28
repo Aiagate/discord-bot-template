@@ -73,7 +73,7 @@ async def test_create_team_handler_repository_error() -> None:
     mock_repo = MagicMock()
 
     # Mock the repository to return an Err
-    mock_repo.save = AsyncMock(
+    mock_repo.add = AsyncMock(
         return_value=Err(
             RepositoryError(
                 type=RepositoryErrorType.UNEXPECTED,

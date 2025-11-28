@@ -1,5 +1,7 @@
 """Team aggregate root."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -25,7 +27,7 @@ class Team:
         if not self.name:
             raise ValueError("Team name cannot be empty.")
 
-    def change_name(self, new_name: TeamName) -> "Team":
+    def change_name(self, new_name: TeamName) -> Team:
         """チーム名を変更するドメインロジック
 
         Note: updated_at is automatically managed by the repository layer.

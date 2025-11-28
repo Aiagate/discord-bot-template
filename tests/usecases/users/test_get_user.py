@@ -22,7 +22,7 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
             name="Bob",
             email=Email.from_primitive("bob@example.com"),
         )
-        save_result = await repo.save(user)
+        save_result = await repo.add(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
 

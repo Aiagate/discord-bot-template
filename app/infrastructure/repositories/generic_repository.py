@@ -2,113 +2,29 @@
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import TypeVar
 
-from sqlalchemy import delete as sql_delete
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import SQLModel
 
 from app.core.result import Err, Ok, Result
-from app.domain.aggregates.team import Team
-from app.domain.aggregates.user import User
 from app.domain.interfaces import IAuditable, IValueObject
-from app.domain.value_objects import Email, TeamId, TeamName, UserId
-from app.infrastructure.orm_models.team_orm import TeamORM
-from app.infrastructure.orm_models.user_orm import UserORM
-from app.repository import RepositoryError, RepositoryErrorType
+from app.infrastructure.orm_mapping import ORMMappingRegistry
+from app.repository import IRepositoryWithId, RepositoryError, RepositoryErrorType
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
-# Domain型 → ORM型のマッピング
-DOMAIN_TO_ORM_MAP: dict[type, type[SQLModel]] = {
-    Team: TeamORM,
-    User: UserORM,
-}
 
-
-def orm_to_domain(orm_instance: SQLModel) -> Any:
-    """Convert ORM model to domain aggregate.
-
-    For IAuditable entities, timestamps are automatically mapped.
-    """
-    if isinstance(orm_instance, TeamORM):
-        # Parse ULID string from database to TeamId using IValueObject protocol
-        team_id = (
-            TeamId.from_primitive(orm_instance.id)
-            if orm_instance.id
-            else TeamId.generate()
-        )
-        # Parse team name string from database to TeamName using IValueObject protocol
-        team_name = TeamName.from_primitive(orm_instance.name)
-        return Team(
-            id=team_id,
-            name=team_name,
-            created_at=orm_instance.created_at,
-            updated_at=orm_instance.updated_at,
-        )
-    if isinstance(orm_instance, UserORM):
-        # Parse ULID string from database to UserId using IValueObject protocol
-        user_id = (
-            UserId.from_primitive(orm_instance.id)
-            if orm_instance.id
-            else UserId.generate()
-        )
-        # Parse email string from database to Email using IValueObject protocol
-        email = Email.from_primitive(orm_instance.email)
-        return User(
-            id=user_id,
-            name=orm_instance.name,
-            email=email,
-            created_at=orm_instance.created_at,
-            updated_at=orm_instance.updated_at,
-        )
-    raise ValueError(f"Unknown ORM type: {type(orm_instance)}")
-
-
-def domain_to_orm(domain_instance: Any) -> SQLModel:
-    """Convert domain aggregate to ORM model.
-
-    For IAuditable entities, timestamps are automatically mapped.
-    """
-    if isinstance(domain_instance, Team):
-        # Convert TeamId to string for database storage using IValueObject protocol
-        id_str = domain_instance.id.to_primitive()
-        # Convert TeamName to string for database storage using IValueObject protocol
-        name_str = domain_instance.name.to_primitive()
-        return TeamORM(
-            id=id_str,
-            name=name_str,
-            created_at=domain_instance.created_at,
-            updated_at=domain_instance.updated_at,
-        )
-    if isinstance(domain_instance, User):
-        # Convert UserId to string for database storage using IValueObject protocol
-        # For new entities (insert), set id to None to let DB generate
-        # For existing entities (update), use the ULID string
-        id_str = domain_instance.id.to_primitive()
-        # Convert Email to string for database storage using IValueObject protocol
-        email_str = domain_instance.email.to_primitive()
-        return UserORM(
-            id=id_str,
-            name=domain_instance.name,
-            email=email_str,
-            created_at=domain_instance.created_at,
-            updated_at=domain_instance.updated_at,
-        )
-    raise ValueError(f"Unknown domain type: {type(domain_instance)}")
-
-
-class GenericRepository[T, K]:
+class GenericRepository[T, K](IRepositoryWithId[T, K]):
     """Generic repository implementation for SQLModel.
 
-    Implements both IRepository[T] and IRepositoryWithId[T, K].
+    Implements IRepositoryWithId[T, K] (which extends IRepository[T]).
 
     Type Parameters:
         T: Entity type (e.g., User, Order)
-        K: Primary key type (e.g., int, str, UserId) - can be None for save-only repos
+        K: Primary key type (e.g., int, str, UserId) - can be None for repos without get_by_id
     """
 
     def __init__(
@@ -116,10 +32,10 @@ class GenericRepository[T, K]:
     ) -> None:
         self._session = session
         self._entity_type = entity_type
-        self._key_type = key_type  # Can be None for save-only repositories
+        self._key_type = key_type  # Can be None for repositories without get_by_id
 
-        # Get ORM model class for this domain type
-        orm_type = DOMAIN_TO_ORM_MAP.get(entity_type)
+        # Get ORM model class from registry
+        orm_type = ORMMappingRegistry.get_orm_type(entity_type)
         if orm_type is None:
             raise ValueError(f"No ORM mapping found for {entity_type}")
         self._orm_type = orm_type
@@ -144,20 +60,22 @@ class GenericRepository[T, K]:
                 )
                 return Err(err)
 
-            return Ok(orm_to_domain(orm_instance))
+            # Use registry for conversion
+            return Ok(ORMMappingRegistry.from_orm(orm_instance))
         except SQLAlchemyError as e:
             logger.exception("Database error occurred in get_by_id")
             err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
             return Err(err)
 
-    async def save(self, entity: T) -> Result[T, RepositoryError]:
-        """Save entity.
+    async def add(self, entity: T) -> Result[T, RepositoryError]:
+        """Add entity.
 
         For IAuditable entities, automatically updates the updated_at timestamp
         when updating existing entities.
         """
         try:
-            orm_instance = domain_to_orm(entity)
+            # Use registry for conversion
+            orm_instance = ORMMappingRegistry.to_orm(entity)
 
             # IAuditableエンティティの場合、更新時にupdated_atを自動設定
             is_update = orm_instance.id is not None  # type: ignore[attr-defined]
@@ -172,23 +90,46 @@ class GenericRepository[T, K]:
                 orm_instance = await self._session.merge(orm_instance)
                 await self._session.flush()
 
-            return Ok(orm_to_domain(orm_instance))
+            # Use registry for conversion
+            return Ok(ORMMappingRegistry.from_orm(orm_instance))
         except SQLAlchemyError as e:
-            logger.exception("Database error occurred in save")
+            logger.exception("Database error occurred in add")
             err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
             return Err(err)
 
-    async def delete(self, id: K) -> Result[None, RepositoryError]:
-        """Delete entity by ID."""
+    async def delete(self, entity: T) -> Result[None, RepositoryError]:
+        """Delete entity."""
         try:
+            # Get the entity's ID (check if it has an id attribute)
+            entity_id = getattr(entity, "id", None)
+            if entity_id is None:
+                err = RepositoryError(
+                    type=RepositoryErrorType.UNEXPECTED,
+                    message="Entity does not have an id attribute",
+                )
+                return Err(err)
+
             # Convert value object to primitive type for database query
             id_value = (
-                id.to_primitive()  # type: ignore[attr-defined]
-                if isinstance(id, IValueObject)
-                else id
+                entity_id.to_primitive()  # type: ignore[attr-defined]
+                if isinstance(entity_id, IValueObject)
+                else entity_id
             )
-            statement = sql_delete(self._orm_type).where(self._orm_type.id == id_value)  # type: ignore[attr-defined]
-            await self._session.execute(statement)
+
+            # Fetch the ORM instance from the database
+            statement = select(self._orm_type).where(self._orm_type.id == id_value)  # type: ignore[attr-defined]
+            result = await self._session.execute(statement)
+            orm_instance = result.scalar_one_or_none()
+
+            if orm_instance is None:
+                err = RepositoryError(
+                    type=RepositoryErrorType.NOT_FOUND,
+                    message=f"{self._entity_type.__name__} with id {entity_id} not found",
+                )
+                return Err(err)
+
+            # Delete the ORM instance
+            await self._session.delete(orm_instance)
             return Ok(None)
         except SQLAlchemyError as e:
             logger.exception("Database error occurred in delete")

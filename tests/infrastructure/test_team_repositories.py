@@ -22,7 +22,7 @@ async def test_team_repository_save_and_get(uow: IUnitOfWork) -> None:
     # Save team
     async with uow:
         repo = uow.GetRepository(Team)
-        save_result = await repo.save(team)
+        save_result = await repo.add(team)
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
         assert saved_team.id == team.id
@@ -62,14 +62,14 @@ async def test_team_repository_delete(uow: IUnitOfWork) -> None:
     # 1. Create team
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
-        saved_team_result = await repo.save(team)
+        saved_team_result = await repo.add(team)
         assert isinstance(saved_team_result, Ok)
         saved_team = saved_team_result.value
 
     # 2. Delete team
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
-        delete_result = await repo.delete(saved_team.id)
+        delete_result = await repo.delete(saved_team)
         assert isinstance(delete_result, Ok)
 
     # 3. Verify team is deleted
@@ -91,7 +91,7 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 
     async with uow:
         repo = uow.GetRepository(Team)
-        save_result = await repo.save(team)
+        save_result = await repo.add(team)
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
 
@@ -113,7 +113,7 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
 
     async with uow:
         repo = uow.GetRepository(Team)
-        save_result = await repo.save(team)
+        save_result = await repo.add(team)
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
         original_updated_at = saved_team.updated_at
@@ -124,7 +124,7 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
 
     async with uow:
         repo = uow.GetRepository(Team)
-        update_result = await repo.save(saved_team)
+        update_result = await repo.add(saved_team)
         assert isinstance(update_result, Ok)
         updated_team = update_result.value
         # SQLite doesn't support microsecond precision well,

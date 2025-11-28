@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -24,7 +26,7 @@ class User:
         if not self.name:
             raise ValueError("User name cannot be empty.")
 
-    def change_email(self, new_email: Email) -> "User":
+    def change_email(self, new_email: Email) -> User:
         """メールアドレスを変更するドメインロジック
 
         Note: updated_at is automatically managed by the repository layer.
