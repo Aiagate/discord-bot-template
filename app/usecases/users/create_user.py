@@ -10,7 +10,6 @@ from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import Email, UserId
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
-from app.usecases.users.user_dto import UserDTO
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,8 @@ logger = logging.getLogger(__name__)
 class CreateUserResult:
     """Result object for CreateUser command."""
 
-    def __init__(self, user: UserDTO) -> None:
-        self.user = user
+    def __init__(self, user_id: str) -> None:
+        self.user_id = user_id
 
 
 class CreateUserCommand(Request[Result[CreateUserResult, UseCaseError]]):
@@ -52,18 +51,14 @@ class CreateUserHandler(
             return Err(error)
 
         async with self._uow:
-            user_repo = self._uow.GetRepository(User)  # IRepository[User] - add only
+            user_repo = self._uow.GetRepository(User)
             save_result = await user_repo.add(user)
 
             match save_result:
                 case Ok(saved_user):
                     logger.info("Created user: %s", saved_user)
-                    user_dto = UserDTO(
-                        id=saved_user.id.to_primitive(),
-                        name=saved_user.name,
-                        email=saved_user.email.to_primitive(),
-                    )
-                    return Ok(CreateUserResult(user_dto))
+                    user_id = saved_user.id.to_primitive()
+                    return Ok(CreateUserResult(user_id))
                 case Err(repo_error):
                     logger.error(
                         "Repository error in CreateUserHandler: %s", repo_error

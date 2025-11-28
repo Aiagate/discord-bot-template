@@ -60,10 +60,23 @@ class TeamsCog(commands.Cog, name="Teams"):
 
         match result:
             case Ok(ok_value):
-                message = (
-                    f"Team Created:\nID: {ok_value.team.id}\nName: {ok_value.team.name}"
-                )
-                await ctx.send(content=message)
+                team_id = ok_value.team_id
+                query = GetTeamQuery(team_id=team_id)
+                get_result = await Mediator.send_async(query)
+
+                match get_result:
+                    case Ok(get_ok_value):
+                        message = (
+                            f"Team Created:\n"
+                            f"ID: {get_ok_value.team.id}\n"
+                            f"Name: {get_ok_value.team.name}"
+                        )
+                        await ctx.send(content=message)
+                    case Err(get_err_value):
+                        logger.error(
+                            "Failed to get created team: %s", get_err_value.message
+                        )
+                        await ctx.send(f"Error: {get_err_value.message}")
             case Err(err_value):
                 logger.error("Failed to create team: %s", err_value.message)
                 await ctx.send(f"Error: {err_value.message}")
