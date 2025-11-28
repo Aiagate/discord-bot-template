@@ -4,8 +4,8 @@ import pytest
 
 from app.core.result import Ok
 from app.domain.aggregates.user import User
+from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import Email, UserId
-from app.repository import IUnitOfWork
 
 
 @pytest.mark.anyio

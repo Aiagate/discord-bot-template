@@ -4,8 +4,6 @@ from typing import Any, ClassVar
 
 from injector import Injector
 
-from app import container
-
 logger = logging.getLogger(__name__)
 
 
@@ -52,11 +50,24 @@ class RequestHandler[T, R](ABC, metaclass=CombinedMeta):
 
 class Mediator:
     _request_handlers: ClassVar[dict[type[Any], type[Any]]] = {}
-    _injector = Injector([container.configure])
+    _injector: ClassVar[Injector | None] = None
+
+    @classmethod
+    def initialize(cls, injector: Injector) -> None:
+        """Initialize mediator with injector.
+
+        This method should be called once at application startup,
+        before sending any requests.
+        """
+        cls._injector = injector
 
     @classmethod
     async def send_async[R](cls, request: Request[R]) -> R:
         logger.debug("Mediator.send_async: %s", request)
+        if cls._injector is None:
+            raise RuntimeError(
+                "Mediator not initialized. Call Mediator.initialize() first."
+            )
         handler_provider = cls._request_handlers.get(type(request))
         if not handler_provider:
             raise HandlerNotFoundError(request)

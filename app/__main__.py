@@ -25,11 +25,19 @@ class MyBot(commands.Bot):
 
     async def _init_database(self) -> None:
         """Initialize database connection and create tables."""
+        from injector import Injector
+
+        from app import container
         from app.infrastructure.database import create_db_and_tables, init_db
+        from app.mediator import Mediator
 
         db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./bot.db")
         init_db(db_url, echo=True)
         await create_db_and_tables()
+
+        # Initialize Mediator with dependency injection container
+        injector = Injector([container.configure])
+        Mediator.initialize(injector)
 
     async def load_cogs(self) -> None:
         await self.load_extension(teams_cog.__name__)

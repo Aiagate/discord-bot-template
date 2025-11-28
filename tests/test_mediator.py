@@ -1,8 +1,13 @@
 """Tests for the Mediator."""
 
 import pytest
+from injector import Injector
 
+from app import container
 from app.mediator import HandlerNotFoundError, Mediator, Request, RequestHandler
+
+# Initialize Mediator for tests
+Mediator.initialize(Injector([container.configure]))
 
 
 class MyQuery(Request[str]):
