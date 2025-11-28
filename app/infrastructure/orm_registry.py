@@ -19,7 +19,3 @@ def init_orm_mappings() -> None:
     """
     register_orm_mapping(User, UserORM)
     register_orm_mapping(Team, TeamORM)
-
-
-# Auto-register on import
-init_orm_mappings()

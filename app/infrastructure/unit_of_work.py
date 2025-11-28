@@ -4,8 +4,8 @@ from typing import Any, overload
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.domain.repositories import IRepository, IRepositoryWithId, IUnitOfWork
 from app.infrastructure.repositories.generic_repository import GenericRepository
-from app.repository import IRepository, IRepositoryWithId, IUnitOfWork
 
 
 class SQLAlchemyUnitOfWork(IUnitOfWork):

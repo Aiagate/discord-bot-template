@@ -6,9 +6,9 @@ from injector import inject
 
 from app.core.result import Err, Ok, Result
 from app.domain.aggregates.user import User
+from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import Email, UserId
 from app.mediator import Request, RequestHandler
-from app.repository import IUnitOfWork
 from app.usecases.result import ErrorType, UseCaseError
 from app.usecases.users.user_dto import UserDTO
 

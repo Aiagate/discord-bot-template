@@ -4,8 +4,8 @@ import pytest
 
 from app.core.result import Err, Ok
 from app.domain.aggregates.team import Team
+from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId, TeamName
-from app.repository import IUnitOfWork
 from app.usecases.result import ErrorType
 from app.usecases.teams.get_team import GetTeamHandler, GetTeamQuery
 

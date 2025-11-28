@@ -10,8 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.result import Err, Ok, Result
 from app.domain.interfaces import IAuditable, IValueObject
+from app.domain.repositories import (
+    IRepositoryWithId,
+    RepositoryError,
+    RepositoryErrorType,
+)
 from app.infrastructure.orm_mapping import ORMMappingRegistry
-from app.repository import IRepositoryWithId, RepositoryError, RepositoryErrorType
 
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
