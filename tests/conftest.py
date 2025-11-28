@@ -6,8 +6,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
+from app.infrastructure.orm_registry import init_orm_mappings
 from app.infrastructure.unit_of_work import SQLAlchemyUnitOfWork
 from app.repository import IUnitOfWork
+
+# Initialize ORM mappings before any tests
+init_orm_mappings()
 
 
 @pytest.fixture(scope="function")

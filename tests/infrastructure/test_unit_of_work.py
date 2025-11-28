@@ -21,7 +21,7 @@ async def test_uow_rollback(uow: IUnitOfWork) -> None:
     # 1. Save a user and get its ID
     async with uow:
         repo = uow.GetRepository(User, UserId)
-        save_result = await repo.save(user)
+        save_result = await repo.add(user)
         assert isinstance(save_result, Ok)
         initial_user = save_result.value
         assert initial_user.id  # ULID should exist
@@ -34,7 +34,7 @@ async def test_uow_rollback(uow: IUnitOfWork) -> None:
             assert isinstance(get_result, Ok)
             user_to_update = get_result.value
             user_to_update.name = "Updated Name"
-            await repo.save(user_to_update)
+            await repo.add(user_to_update)
             raise ValueError("Simulating a failure")
     except ValueError:
         # Expected failure

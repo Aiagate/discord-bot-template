@@ -51,8 +51,8 @@ class CreateTeamHandler(
             return Err(error)
 
         async with self._uow:
-            team_repo = self._uow.GetRepository(Team)  # IRepository[Team] - save only
-            save_result = await team_repo.save(team)
+            team_repo = self._uow.GetRepository(Team)  # IRepository[Team] - add only
+            save_result = await team_repo.add(team)
 
             match save_result:
                 case Ok(saved_team):

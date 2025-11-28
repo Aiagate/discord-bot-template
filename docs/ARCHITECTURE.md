@@ -113,19 +113,23 @@ class User:
 from abc import ABC, abstractmethod
 from app.core.result import Result
 
-class IRepository[T, K](ABC):
-    """汎用リポジトリインターフェース"""
+class IRepository[T](ABC):
+    """基本リポジトリインターフェース（追加・削除操作）"""
+
+    @abstractmethod
+    async def add(self, entity: T) -> Result[T, RepositoryError]:
+        pass
+
+    @abstractmethod
+    async def delete(self, entity: T) -> Result[None, RepositoryError]:
+        pass
+
+
+class IRepositoryWithId[T, K](IRepository[T], ABC):
+    """ID検索機能付きリポジトリインターフェース"""
 
     @abstractmethod
     async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
-        pass
-
-    @abstractmethod
-    async def save(self, entity: T) -> Result[T, RepositoryError]:
-        pass
-
-    @abstractmethod
-    async def delete(self, id: K) -> Result[None, RepositoryError]:
         pass
 ```
 
@@ -134,6 +138,21 @@ class IRepository[T, K](ABC):
 - ドメイン層でインターフェースを定義
 - 実装はインフラ層が担当（依存性逆転）
 - Result型で型安全なエラーハンドリング
+
+**設計判断: Protocol から ABC への移行**:
+
+当初は `Protocol` ベースの設計を採用していましたが、DI（依存性注入）による
+インターフェース分離が実現されているため、`Protocol` の構造的型付けの柔軟性は
+不要であることが判明しました。
+
+`ABC` ベースの明示的継承により、以下の利点が得られます:
+- 型安全性の向上（クラス定義時にエラー検出）
+- IDEサポートの改善（自動補完、リファクタリング）
+- 開発者の意図の明確化
+- インターフェースと実装の乖離防止
+
+なお、`IValueObject` などのドメイン層インターフェースは、ランタイム型チェックが
+必要なため、引き続き `Protocol` を使用します。
 
 ##### 1.3 Result Type（結果型）
 
@@ -333,18 +352,19 @@ class UserORM(SQLModel, table=True):
 `app/infrastructure/repositories/generic_repository.py`:
 
 ```python
-class GenericRepository[T, K]:
-    """汎用リポジトリ実装"""
+class GenericRepository[T, K](IRepositoryWithId[T, K]):
+    """汎用リポジトリ実装 - IRepositoryWithId[T, K]を明示的に実装"""
 
     def __init__(
         self,
         session: AsyncSession,
         entity_type: type[T],
-        key_type: type[K]
+        key_type: type[K] | None
     ) -> None:
         self._session = session
         self._entity_type = entity_type
-        self._orm_type = DOMAIN_TO_ORM_MAP[entity_type]
+        self._key_type = key_type
+        self._orm_type = ORMMappingRegistry.get_orm_type(entity_type)
 
     async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
         statement = select(self._orm_type).where(self._orm_type.id == id)
@@ -354,8 +374,8 @@ class GenericRepository[T, K]:
         if orm_instance is None:
             return Err(RepositoryError(...))
 
-        # ORM → Domain 変換
-        return Ok(orm_to_domain(orm_instance))
+        # ORM → Domain 自動変換
+        return Ok(ORMMappingRegistry.from_orm(orm_instance))
 ```
 
 **ポイント**:
@@ -364,27 +384,63 @@ class GenericRepository[T, K]:
 - ORM ↔ Domain の変換を担当
 - Result型でエラーハンドリング
 
-**変換関数**:
+**自動変換機構**:
+
+ドメイン集約とORMモデル間の変換は、`IValueObject` Protocolを活用して自動的に行われます:
 
 ```python
-def orm_to_domain(orm_instance: SQLModel) -> Any:
-    """ORM → Domain"""
-    if isinstance(orm_instance, UserORM):
-        return User(
-            id=orm_instance.id or 0,
-            name=orm_instance.name,
-            email=orm_instance.email,
-        )
+def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
+    """ドメインエンティティをORM用辞書に変換
 
-def domain_to_orm(domain_instance: Any) -> SQLModel:
-    """Domain → ORM"""
-    if isinstance(domain_instance, User):
-        return UserORM(
-            id=domain_instance.id if domain_instance.id != 0 else None,
-            name=domain_instance.name,
-            email=domain_instance.email,
-        )
+    - dataclassのフィールドを走査
+    - IValueObjectフィールドはto_primitive()で変換
+    - プリミティブ型はそのまま使用
+    """
+    if not is_dataclass(entity):
+        raise TypeError(f"Expected dataclass, got {type(entity).__name__}")
+
+    result: dict[str, Any] = {}
+    for field in fields(entity):
+        field_value = getattr(entity, field.name)
+        if isinstance(field_value, IValueObject):
+            result[field.name] = field_value.to_primitive()
+        else:
+            result[field.name] = field_value
+
+    return result
+
+
+def orm_to_entity(orm_instance: SQLModel, entity_type: type[T]) -> T:
+    """ORMモデルをドメインエンティティに変換
+
+    - 型アノテーションを取得
+    - from_primitive()メソッドを持つ型はValue Objectとして変換
+    - プリミティブ型はそのまま使用
+    """
+    type_hints = get_type_hints(entity_type)
+    kwargs: dict[str, Any] = {}
+
+    for field in fields(entity_type):
+        field_type = type_hints[field.name]
+        orm_value = getattr(orm_instance, field.name, None)
+
+        if hasattr(field_type, "from_primitive"):
+            if orm_value is None and field.name == "id":
+                kwargs[field.name] = field_type.generate()
+            else:
+                kwargs[field.name] = field_type.from_primitive(orm_value)
+        else:
+            kwargs[field.name] = orm_value
+
+    return entity_type(**kwargs)
 ```
+
+**利点**:
+
+- **型安全**: 型アノテーションベースで自動変換
+- **保守性向上**: 新しいValue Objectを追加しても変換コード不要
+- **依存性逆転**: ドメイン層がインフラ層に依存しない
+- **DRY原則**: 変換ロジックの重複を排除
 
 ##### 3.3 Unit of Work Pattern
 
@@ -474,6 +530,44 @@ class AppModule(Module):
 - `injector` ライブラリを使用
 - シングルトンとリクエストスコープの使い分け
 - テスト時のモック注入が容易
+
+##### 3.5 ORM Mapping Registry
+
+`app/infrastructure/orm_registry.py`:
+
+```python
+def init_orm_mappings() -> None:
+    """Initialize all ORM mappings."""
+    register_orm_mapping(User, UserORM)
+    register_orm_mapping(Team, TeamORM)
+
+# Auto-register on import
+init_orm_mappings()
+```
+
+**ポイント**:
+
+- **集中管理**: すべてのマッピングを一箇所で管理
+- **自動登録**: モジュールインポート時に自動実行
+- **拡張容易**: 新しい集約追加時はここに1行追加するだけ
+- **明示的**: どの集約がマッピングされているか一目瞭然
+
+**使用方法**:
+
+```python
+# container.py で初期化
+from app.infrastructure.orm_registry import init_orm_mappings
+
+def configure(binder: Binder) -> None:
+    init_orm_mappings()  # マッピング初期化
+    # ... 他のバインディング
+```
+
+**利点**:
+
+- Domain層からInfrastructure層への依存が完全に削除される
+- 新しいAggregateを追加する際の作業が1行で完結
+- 自動変換機構により、変換コードの記述が不要
 
 ---
 

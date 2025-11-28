@@ -35,7 +35,7 @@ async def test_repository_delete(uow: IUnitOfWork) -> None:
     # 1. Create user
     async with uow:
         repo = uow.GetRepository(User, UserId)
-        saved_user_result = await repo.save(user)
+        saved_user_result = await repo.add(user)
         assert isinstance(saved_user_result, Ok)
         saved_user = saved_user_result.value
         assert saved_user.id  # ULID should exist
@@ -43,7 +43,7 @@ async def test_repository_delete(uow: IUnitOfWork) -> None:
     # 2. Delete user
     async with uow:
         repo = uow.GetRepository(User, UserId)
-        delete_result = await repo.delete(saved_user.id)
+        delete_result = await repo.delete(saved_user)
         assert isinstance(delete_result, Ok)
 
     # 3. Verify user is deleted
@@ -65,8 +65,8 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     )
 
     async with uow:
-        repo = uow.GetRepository(User)  # IRepository[User] - save only
-        save_result = await repo.save(user)
+        repo = uow.GetRepository(User)  # IRepository[User] - add only
+        save_result = await repo.add(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
 
@@ -88,8 +88,8 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     )
 
     async with uow:
-        repo = uow.GetRepository(User)  # IRepository[User] - save only
-        save_result = await repo.save(user)
+        repo = uow.GetRepository(User)  # IRepository[User] - add only
+        save_result = await repo.add(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
         original_updated_at = saved_user.updated_at
@@ -99,8 +99,8 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     saved_user.email = Email.from_primitive("updated@example.com")
 
     async with uow:
-        repo = uow.GetRepository(User)  # IRepository[User] - save only
-        update_result = await repo.save(saved_user)
+        repo = uow.GetRepository(User)  # IRepository[User] - add only
+        update_result = await repo.add(saved_user)
         assert isinstance(update_result, Ok)
         updated_user = update_result.value
 

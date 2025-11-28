@@ -21,7 +21,7 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
 
     async with uow:
         repo = uow.GetRepository(Team)
-        save_result = await repo.save(team)
+        save_result = await repo.add(team)
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
 

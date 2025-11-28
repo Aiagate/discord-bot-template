@@ -3,6 +3,7 @@
 import injector
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.infrastructure.orm_registry import init_orm_mappings
 from app.infrastructure.unit_of_work import SQLAlchemyUnitOfWork
 from app.repository import IUnitOfWork
 
@@ -30,4 +31,7 @@ class DatabaseModule(injector.Module):
 
 def configure(binder: injector.Binder) -> None:
     """Configure dependency injection bindings."""
+    # Initialize ORM mappings
+    init_orm_mappings()
+
     binder.install(DatabaseModule())

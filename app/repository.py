@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, Protocol, overload
+from typing import Any, overload
 
 from app.core.result import Result
 
@@ -23,39 +23,42 @@ class RepositoryError:
     message: str
 
 
-class IRepository[T](Protocol):
-    """Repository interface for save operations only.
+class IRepository[T](ABC):
+    """Repository interface for add and delete operations.
 
-    Use this when you only need to save entities (e.g., Create operations).
+    Use this when you need to add or delete entities without ID-based retrieval.
     Does not require knowledge of ID type.
 
     Type Parameters:
         T: Entity type (e.g., User, Order)
     """
 
-    async def save(self, entity: T) -> Result[T, RepositoryError]:
-        """Save or update entity."""
-        ...
+    @abstractmethod
+    async def add(self, entity: T) -> Result[T, RepositoryError]:
+        """Add or update entity."""
+        pass
+
+    @abstractmethod
+    async def delete(self, entity: T) -> Result[None, RepositoryError]:
+        """Delete entity."""
+        pass
 
 
-class IRepositoryWithId[T, K](IRepository[T], Protocol):
-    """Repository interface with ID-based operations.
+class IRepositoryWithId[T, K](IRepository[T], ABC):
+    """Repository interface with ID-based get operation.
 
-    Extends IRepository[T] with get_by_id and delete operations.
-    Use this when you need to retrieve or delete entities by ID.
+    Extends IRepository[T] with get_by_id operation.
+    Use this when you need to retrieve entities by ID.
 
     Type Parameters:
         T: Entity type (e.g., User, Order)
         K: Primary key type (e.g., int, str, UserId)
     """
 
+    @abstractmethod
     async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
         """Get entity by ID."""
-        ...
-
-    async def delete(self, id: K) -> Result[None, RepositoryError]:
-        """Delete entity by ID."""
-        ...
+        pass
 
 
 class IUnitOfWork(ABC):
@@ -63,13 +66,13 @@ class IUnitOfWork(ABC):
 
     @overload
     def GetRepository[T](self, entity_type: type[T]) -> IRepository[T]:
-        """Get repository for save-only operations.
+        """Get repository for add and delete operations.
 
         Args:
             entity_type: The domain entity type (e.g., User)
 
         Returns:
-            Repository instance with save-only operations
+            Repository instance with add and delete operations
         """
         ...
 
@@ -77,14 +80,14 @@ class IUnitOfWork(ABC):
     def GetRepository[T, K](
         self, entity_type: type[T], key_type: type[K]
     ) -> IRepositoryWithId[T, K]:
-        """Get repository with ID-based operations.
+        """Get repository with ID-based get operation.
 
         Args:
             entity_type: The domain entity type (e.g., User)
             key_type: The primary key type (e.g., int, str, UserId)
 
         Returns:
-            Repository instance with all operations (save, get_by_id, delete)
+            Repository instance with all operations (add, delete, get_by_id)
         """
         ...
 
@@ -95,8 +98,8 @@ class IUnitOfWork(ABC):
         """Get repository for entity type.
 
         This method is overloaded:
-        - GetRepository(User) -> IRepository[User] (save only)
-        - GetRepository(User, UserId) -> IRepositoryWithId[User, UserId] (all ops)
+        - GetRepository(User) -> IRepository[User] (add, delete)
+        - GetRepository(User, UserId) -> IRepositoryWithId[User, UserId] (add, delete, get_by_id)
 
         Args:
             entity_type: The domain entity type
