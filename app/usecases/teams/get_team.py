@@ -6,9 +6,9 @@ from injector import inject
 
 from app.core.result import Err, Ok, Result
 from app.domain.aggregates.team import Team
+from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId
 from app.mediator import Request, RequestHandler
-from app.repository import IUnitOfWork
 from app.usecases.result import ErrorType, UseCaseError
 from app.usecases.teams.team_dto import TeamDTO
 

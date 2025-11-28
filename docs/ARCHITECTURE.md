@@ -1,6 +1,6 @@
 # アーキテクチャ設計ドキュメント
 
-最終更新日: 2025-11-26
+最終更新日: 2025-11-28
 
 このドキュメントは、Discord Bot テンプレートのアーキテクチャ設計と実装パターンを詳細に説明します。
 
@@ -27,7 +27,7 @@
 │  Domain Layer                           │  ビジネスルール
 │  (Aggregates, Entities, Value Objects)  │  - 純粋なPythonオブジェクト
 │  - app/domain/aggregates/               │  - フレームワーク非依存
-│  - app/repository.py (interfaces)       │  - ビジネスロジックの検証
+│  - app/domain/repositories/             │  - ビジネスロジックの検証
 ├─────────────────────────────────────────┤
 │  Infrastructure Layer                   │  技術的詳細
 │  (Database, ORM, External Services)     │  - データベースアクセス

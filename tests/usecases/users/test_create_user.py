@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.result import Err, Ok
-from app.repository import IUnitOfWork, RepositoryError, RepositoryErrorType
+from app.domain.repositories import IUnitOfWork, RepositoryError, RepositoryErrorType
 from app.usecases.result import ErrorType
 from app.usecases.users.create_user import (
     CreateUserCommand,

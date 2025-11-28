@@ -4,8 +4,8 @@ import pytest
 from injector import Injector
 
 from app import container
+from app.domain.repositories import IUnitOfWork
 from app.infrastructure.unit_of_work import SQLAlchemyUnitOfWork
-from app.repository import IUnitOfWork
 
 
 @pytest.mark.anyio
