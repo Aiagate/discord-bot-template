@@ -4,7 +4,7 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result
+from app.core.result import Err, Ok, Result, is_err
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId, TeamName
@@ -51,18 +51,26 @@ class CreateTeamHandler(
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team)
-            save_result = await team_repo.add(team)
+            add_result = await team_repo.add(team)
 
-            match save_result:
-                case Ok(saved_team):
-                    logger.info("Created team: %s", saved_team)
-                    team_id = saved_team.id.to_primitive()
-                    return Ok(CreateTeamResult(team_id))
-                case Err(repo_error):
-                    logger.error(
-                        "Repository error in CreateTeamHandler: %s", repo_error
-                    )
-                    uc_error = UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=repo_error.message
-                    )
-                    return Err(uc_error)
+            if is_err(add_result):
+                repo_error = add_result.error
+                logger.error(
+                    "Repository error in CreateTeamHandler: %s", repo_error.message
+                )
+                return Err(
+                    UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
+                )
+
+            commit_result = await self._uow.commit()
+            if is_err(commit_result):
+                repo_error = commit_result.error
+                logger.error("Commit error in CreateTeamHandler: %s", repo_error)
+                uc_error = UseCaseError(
+                    type=ErrorType.UNEXPECTED, message=repo_error.message
+                )
+                return Err(uc_error)
+
+            logger.info("Created team: %s", team)
+            team_id = team.id.to_primitive()
+            return Ok(CreateTeamResult(team_id))

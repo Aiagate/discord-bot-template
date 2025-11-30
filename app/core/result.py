@@ -2,7 +2,7 @@
 
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Never, TypeVar
+from typing import Any, Literal, Never, TypeGuard, TypeVar
 
 T = TypeVar("T")  # Success type
 E = TypeVar("E")  # Error type
@@ -127,6 +127,16 @@ class Err[E]:
 
 
 Result = Ok[T] | Err[E]
+
+
+def is_ok[T, E](result: Result[T, E]) -> TypeGuard[Ok[T]]:
+    """Return true if the result is ok."""
+    return result.is_ok
+
+
+def is_err[T, E](result: Result[T, E]) -> TypeGuard[Err[E]]:
+    """Return true if the result is an error."""
+    return result.is_err
 
 
 def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:

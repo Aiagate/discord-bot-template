@@ -111,7 +111,7 @@ class IUnitOfWork(ABC):
         pass
 
     @abstractmethod
-    async def commit(self) -> None:
+    async def commit(self) -> Result[None, "RepositoryError"]:
         """Commit the transaction."""
         pass
 

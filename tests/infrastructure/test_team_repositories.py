@@ -27,6 +27,8 @@ async def test_team_repository_save_and_get(uow: IUnitOfWork) -> None:
         saved_team = save_result.value
         assert saved_team.id == team.id
         assert saved_team.name.to_primitive() == "Alpha Team"
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # Retrieve team
     async with uow:
@@ -65,12 +67,16 @@ async def test_team_repository_delete(uow: IUnitOfWork) -> None:
         saved_team_result = await repo.add(team)
         assert isinstance(saved_team_result, Ok)
         saved_team = saved_team_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # 2. Delete team
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         delete_result = await repo.delete(saved_team)
         assert isinstance(delete_result, Ok)
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # 3. Verify team is deleted
     async with uow:
@@ -94,6 +100,8 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
         save_result = await repo.add(team)
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     after_creation = datetime.now(UTC)
 
@@ -117,6 +125,8 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
         original_updated_at = saved_team.updated_at
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     await asyncio.sleep(0.01)
 
@@ -127,6 +137,8 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
         update_result = await repo.add(saved_team)
         assert isinstance(update_result, Ok)
         updated_team = update_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
         # SQLite doesn't support microsecond precision well,
         # so we just check it's not exactly the same
         assert updated_team.updated_at != original_updated_at

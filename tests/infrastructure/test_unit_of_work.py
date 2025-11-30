@@ -25,6 +25,8 @@ async def test_uow_rollback(uow: IUnitOfWork) -> None:
         assert isinstance(save_result, Ok)
         initial_user = save_result.value
         assert initial_user.id  # ULID should exist
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # 2. Attempt to update the user in a failing transaction
     try:

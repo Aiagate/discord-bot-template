@@ -39,12 +39,16 @@ async def test_repository_delete(uow: IUnitOfWork) -> None:
         assert isinstance(saved_user_result, Ok)
         saved_user = saved_user_result.value
         assert saved_user.id  # ULID should exist
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # 2. Delete user
     async with uow:
         repo = uow.GetRepository(User, UserId)
         delete_result = await repo.delete(saved_user)
         assert isinstance(delete_result, Ok)
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # 3. Verify user is deleted
     async with uow:
@@ -69,6 +73,8 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
         save_result = await repo.add(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     after_creation = datetime.now(UTC)
 
@@ -93,6 +99,8 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
         original_updated_at = saved_user.updated_at
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     await asyncio.sleep(0.01)
 
@@ -103,6 +111,8 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
         update_result = await repo.add(saved_user)
         assert isinstance(update_result, Ok)
         updated_user = update_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     assert updated_user.updated_at > original_updated_at
     assert updated_user.created_at == saved_user.created_at

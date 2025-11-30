@@ -2,9 +2,17 @@
 
 from typing import Any, overload
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.domain.repositories import IRepository, IRepositoryWithId, IUnitOfWork
+from app.core.result import Err, Ok, Result
+from app.domain.repositories import (
+    IRepository,
+    IRepositoryWithId,
+    IUnitOfWork,
+    RepositoryError,
+    RepositoryErrorType,
+)
 from app.infrastructure.repositories.generic_repository import GenericRepository
 
 
@@ -50,11 +58,17 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
         self._repositories[cache_key] = repository
         return repository
 
-    async def commit(self) -> None:
+    async def commit(self) -> Result[None, RepositoryError]:
         """Commit the transaction."""
         if self._session is None:
             raise RuntimeError("UnitOfWork session not initialized.")
-        await self._session.commit()
+        try:
+            await self._session.commit()
+            return Ok(None)
+        except SQLAlchemyError as e:
+            return Err(
+                RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
+            )
 
     async def rollback(self) -> None:
         """Rollback the transaction."""
@@ -69,15 +83,12 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Exit async context manager with auto-commit/rollback."""
+        """Exit async context manager with auto-rollback."""
         if self._session is None:
             return
 
         try:
-            if exc_type is None:
-                # No exception - commit
-                await self.commit()
-            else:
+            if exc_type is not None:
                 # Exception occurred - rollback
                 await self.rollback()
         finally:
