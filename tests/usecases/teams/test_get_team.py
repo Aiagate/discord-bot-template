@@ -24,6 +24,8 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
         save_result = await repo.add(team)
         assert isinstance(save_result, Ok)
         saved_team = save_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # Now test retrieving it
     handler = GetTeamHandler(uow)

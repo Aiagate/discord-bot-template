@@ -4,7 +4,7 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result
+from app.core.result import Err, Ok, Result, is_err
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import Email, UserId
@@ -52,18 +52,27 @@ class CreateUserHandler(
 
         async with self._uow:
             user_repo = self._uow.GetRepository(User)
-            save_result = await user_repo.add(user)
+            add_result = await user_repo.add(user)
 
-            match save_result:
-                case Ok(saved_user):
-                    logger.info("Created user: %s", saved_user)
-                    user_id = saved_user.id.to_primitive()
-                    return Ok(CreateUserResult(user_id))
-                case Err(repo_error):
-                    logger.error(
-                        "Repository error in CreateUserHandler: %s", repo_error
-                    )
-                    uc_error = UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=repo_error.message
-                    )
-                    return Err(uc_error)
+            if is_err(add_result):
+                repo_error = add_result.error
+                logger.error(
+                    "Repository error in CreateUserHandler: %s", repo_error.message
+                )
+                return Err(
+                    UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
+                )
+
+            commit_result = await self._uow.commit()
+
+            if is_err(commit_result):
+                repo_error = commit_result.error
+                logger.error("Commit error in CreateUserHandler: %s", repo_error)
+                uc_error = UseCaseError(
+                    type=ErrorType.UNEXPECTED, message=repo_error.message
+                )
+                return Err(uc_error)
+
+            logger.info("Created user: %s", user)
+            user_id = user.id.to_primitive()
+            return Ok(CreateUserResult(user_id))

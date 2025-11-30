@@ -5,7 +5,7 @@
       "name": "Debug Discord Bot",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/app/__main__.py",
+      "module": "app",
       "console": "integratedTerminal",
       "envFile": "${workspaceFolder}/.env.local"
     }

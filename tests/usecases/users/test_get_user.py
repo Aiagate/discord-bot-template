@@ -25,6 +25,8 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
         save_result = await repo.add(user)
         assert isinstance(save_result, Ok)
         saved_user = save_result.value
+        commit_result = await uow.commit()
+        assert isinstance(commit_result, Ok)
 
     # Test: Get user via handler
     handler = GetUserHandler(uow)
