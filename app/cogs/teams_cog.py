@@ -1,11 +1,13 @@
 """Discord cog for team management commands."""
 
+# pyright: reportUnknownLambdaType=false
+
 import logging
 
 from discord.ext import commands
 
-from app.core.result import Err, Ok
 from app.mediator import Mediator
+from app.usecases.result import UseCaseError
 from app.usecases.teams.create_team import CreateTeamCommand
 from app.usecases.teams.get_team import GetTeamQuery
 
@@ -34,19 +36,18 @@ class TeamsCog(commands.Cog, name="Teams"):
     ) -> None:
         """Get team by ID. Usage: !teams get <team_id>"""
         query = GetTeamQuery(team_id=team_id)
-        result = await Mediator.send_async(query)
 
-        match result:
-            case Ok(ok_value):
-                message = (
-                    f"Team Information:\n"
-                    f"ID: {ok_value.team.id}\n"
-                    f"Name: {ok_value.team.name}"
+        message = await (
+            Mediator.send_async(query)
+            .map(  # type: ignore[arg-type, return-value]  # pyright: ignore[reportUnknownLambdaType]
+                lambda value: (
+                    f"Team Information:\nID: {value.team.id}\nName: {value.team.name}"
                 )
-                await ctx.send(content=message)
-            case Err(err_value):
-                logger.error("Failed to get team: %s", err_value.message)
-                await ctx.send(f"Error: {err_value.message}")
+            )
+            .unwrap()
+        )
+
+        await ctx.send(content=message)
 
     @teams.command(name="create")
     async def teams_create(
@@ -55,31 +56,86 @@ class TeamsCog(commands.Cog, name="Teams"):
         name: str,
     ) -> None:
         """Create new team. Usage: !teams create <name>"""
-        command = CreateTeamCommand(name=name)
-        result = await Mediator.send_async(command)
+        message = await (
+            Mediator.send_async(CreateTeamCommand(name=name))
+            .and_then(  # type: ignore[arg-type, return-value]
+                lambda result: Mediator.send_async(GetTeamQuery(result.team_id))
+            )
+            .map(  # type: ignore[arg-type, return-value]
+                lambda value: (
+                    f"Team Created:\nID: {value.team.id}\nName: {value.team.name}"
+                )
+            )
+            .unwrap()
+        )
 
-        match result:
-            case Ok(ok_value):
-                team_id = ok_value.team_id
-                query = GetTeamQuery(team_id=team_id)
-                get_result = await Mediator.send_async(query)
+        await ctx.send(content=message)
 
-                match get_result:
-                    case Ok(get_ok_value):
-                        message = (
-                            f"Team Created:\n"
-                            f"ID: {get_ok_value.team.id}\n"
-                            f"Name: {get_ok_value.team.name}"
-                        )
-                        await ctx.send(content=message)
-                    case Err(get_err_value):
-                        logger.error(
-                            "Failed to get created team: %s", get_err_value.message
-                        )
-                        await ctx.send(f"Error: {get_err_value.message}")
-            case Err(err_value):
-                logger.error("Failed to create team: %s", err_value.message)
-                await ctx.send(f"Error: {err_value.message}")
+    @teams_get.error
+    async def teams_get_error(
+        self, ctx: commands.Context[commands.Bot], error: commands.CommandError
+    ) -> None:
+        """Handle errors for teams get command."""
+        # Unwrap CommandInvokeError to get the actual exception
+        if isinstance(error, commands.CommandInvokeError) and error.original:
+            original_error = error.original
+        else:
+            original_error = error
+
+        # Handle application errors (UseCaseError)
+        if isinstance(original_error, UseCaseError):
+            logger.error(
+                "Use case error in teams get: %s",
+                original_error.message,
+                exc_info=True,
+            )
+            await ctx.send(f"Error: {original_error.message}")
+        # Handle Discord framework errors
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(
+                "Error: Missing required argument. Usage: !teams get <team_id>"
+            )
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send("Error: Invalid argument provided.")
+        else:
+            # Catch-all for unexpected errors
+            logger.error(
+                "Unexpected error in teams get command: %s", error, exc_info=True
+            )
+            await ctx.send(f"Error: {error}")
+
+    @teams_create.error
+    async def teams_create_error(
+        self, ctx: commands.Context[commands.Bot], error: commands.CommandError
+    ) -> None:
+        """Handle errors for teams create command."""
+        # Unwrap CommandInvokeError to get the actual exception
+        if isinstance(error, commands.CommandInvokeError) and error.original:
+            original_error = error.original
+        else:
+            original_error = error
+
+        # Handle application errors (UseCaseError)
+        if isinstance(original_error, UseCaseError):
+            logger.error(
+                "Use case error in teams create: %s",
+                original_error.message,
+                exc_info=True,
+            )
+            await ctx.send(f"Error: {original_error.message}")
+        # Handle Discord framework errors
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(
+                "Error: Missing required argument. Usage: !teams create <name>"
+            )
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send("Error: Invalid argument provided.")
+        else:
+            # Catch-all for unexpected errors
+            logger.error(
+                "Unexpected error in teams create command: %s", error, exc_info=True
+            )
+            await ctx.send(f"Error: {error}")
 
 
 async def setup(bot: commands.Bot) -> None:
