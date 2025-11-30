@@ -56,8 +56,6 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
                     )
                     return Ok(GetUserResult(user_dto))
                 case Err(repo_error):
-                    logger.error("Repository error in GetUserHandler: %s", repo_error)
-                    # Map repository error to use case error
                     uc_error = UseCaseError(
                         type=ErrorType.NOT_FOUND, message=repo_error.message
                     )

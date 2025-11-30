@@ -12,7 +12,10 @@ from sqlmodel import SQLModel
 from alembic import context
 
 # Import all ORM models here for autogenerate to discover them
-from app.infrastructure.orm_models import TeamORM, UserORM  # noqa: F401
+from app.infrastructure.orm_models import (
+    TeamORM,  # pyright: ignore[reportUnusedImport] # noqa: F401
+    UserORM,  # pyright: ignore[reportUnusedImport] # noqa: F401
+)
 
 # this is the Alembic Config object
 config = context.config
