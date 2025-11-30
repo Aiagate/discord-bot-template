@@ -56,9 +56,6 @@ class CreateUserHandler(
 
             if is_err(add_result):
                 repo_error = add_result.error
-                logger.error(
-                    "Repository error in CreateUserHandler: %s", repo_error.message
-                )
                 return Err(
                     UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
                 )
@@ -67,11 +64,9 @@ class CreateUserHandler(
 
             if is_err(commit_result):
                 repo_error = commit_result.error
-                logger.error("Commit error in CreateUserHandler: %s", repo_error)
-                uc_error = UseCaseError(
-                    type=ErrorType.UNEXPECTED, message=repo_error.message
+                return Err(
+                    UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
                 )
-                return Err(uc_error)
 
             logger.info("Created user: %s", user)
             user_id = user.id.to_primitive()

@@ -69,7 +69,7 @@ indent-style = "space"
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"
-include = ["app", "tests"]
+include = ["app", "tests" , "alembic"]
 exclude = [
     "**/__pycache__",
     ".venv",
