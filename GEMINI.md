@@ -46,27 +46,28 @@ All commands should be executed using `uv run`. The project dependencies are man
 
 First-time setup requires creating a virtual environment, installing dependencies, and setting up the database.
 
-1.  **Create virtual environment and install dependencies**:
+1. **Create virtual environment and install dependencies**:
 
     ```bash
     uv venv
     uv sync
     ```
 
-2.  **Install pre-commit hooks**:
+2. **Install pre-commit hooks**:
 
     ```bash
     uv run pre-commit install
     ```
 
-3.  **Configure environment variables**:
+3. **Configure environment variables**:
     Copy `.env.example` to `.env.local` and add your `DISCORD_BOT_TOKEN`.
 
     ```bash
     cp .env.example .env.local
     ```
 
-4.  **Run database migrations**:
+4. **Run database migrations**:
+
     ```bash
     uv run alembic upgrade head
     ```

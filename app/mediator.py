@@ -4,6 +4,8 @@ from typing import Any, ClassVar
 
 from injector import Injector
 
+from app.core.result import ResultAwaitable
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,18 +64,33 @@ class Mediator:
         cls._injector = injector
 
     @classmethod
-    async def send_async[R](cls, request: Request[R]) -> R:
-        logger.debug("Mediator.send_async: %s", request)
-        if cls._injector is None:
-            raise RuntimeError(
-                "Mediator not initialized. Call Mediator.initialize() first."
-            )
-        handler_provider = cls._request_handlers.get(type(request))
-        if not handler_provider:
-            raise HandlerNotFoundError(request)
+    def send_async[R](cls, request: Request[R]) -> ResultAwaitable:  # type: ignore[type-arg]
+        """
+        Send a request to its handler.
 
-        handler = cls._injector.get(handler_provider)
-        return await handler.handle(request)
+        Returns ResultAwaitable for method chaining.
+
+        Args:
+            request: The request to handle
+
+        Returns:
+            ResultAwaitable wrapping the handler result
+        """
+
+        async def execute() -> R:
+            logger.debug("Mediator.send_async: %s", request)
+            if cls._injector is None:
+                raise RuntimeError(
+                    "Mediator not initialized. Call Mediator.initialize() first."
+                )
+            handler_provider = cls._request_handlers.get(type(request))
+            if not handler_provider:
+                raise HandlerNotFoundError(request)
+
+            handler = cls._injector.get(handler_provider)
+            return await handler.handle(request)
+
+        return ResultAwaitable(execute())  # type: ignore[arg-type]
 
     @classmethod
     def register(cls, request_type: type[Any], handler_type: type[Any]) -> None:

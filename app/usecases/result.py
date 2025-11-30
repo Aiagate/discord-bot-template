@@ -13,8 +13,12 @@ class ErrorType(Enum):
 
 
 @dataclass(frozen=True)
-class UseCaseError:
+class UseCaseError(Exception):
     """Represents a specific error from a use case."""
 
     type: ErrorType
     message: str
+
+    def __str__(self) -> str:
+        """Return message for exception representation."""
+        return self.message
