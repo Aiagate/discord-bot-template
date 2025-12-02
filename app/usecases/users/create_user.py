@@ -42,13 +42,26 @@ class CreateUserHandler(
         self, request: CreateUserCommand
     ) -> Result[CreateUserResult, UseCaseError]:
         """Create new user and return as DTO within a Result."""
-        try:
-            email = Email.from_primitive(request.email)
-            user = User(id=UserId.generate(), name=request.name, email=email)
-        except ValueError as e:
-            # Handle potential validation errors from the domain
-            error = UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
+        user_id_result = UserId.generate()
+        email_result = Email.from_primitive(request.email)
+
+        if is_err(user_id_result):
+            return Err(
+                UseCaseError(
+                    type=ErrorType.UNEXPECTED, message="Failed to generate User ID."
+                )
+            )
+
+        if is_err(email_result):
+            error = UseCaseError(
+                type=ErrorType.VALIDATION_ERROR, message=str(email_result.error)
+            )
             return Err(error)
+
+        user_id = user_id_result.unwrap()
+        email = email_result.unwrap()
+
+        user = User(id=user_id, name=request.name, email=email)
 
         async with self._uow:
             user_repo = self._uow.GetRepository(User)

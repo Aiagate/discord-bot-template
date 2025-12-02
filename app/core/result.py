@@ -139,29 +139,54 @@ def is_err[T, E](result: Result[T, E]) -> TypeGuard[Err[E]]:
     return result.is_err
 
 
-def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
+def combine[E](results: Sequence[Result[Any, E]]) -> Result[list[Any], E]:
     """
     Aggregates a sequence of Result objects.
 
-    If all results are Ok, returns an Ok containing a tuple of all success values.
+    If all results are Ok, returns an Ok containing a list of all success values.
     If any result is an Err, returns the first Err encountered.
+    This version handles heterogeneous types in the input sequence.
+
+    Args:
+        results: A sequence of Result objects with potentially different success types.
+
+    Returns:
+        A single Result object. Ok(list of success values) or the first Err.
+    """
+    values: list[Any] = []
+    for r in results:
+        if is_err(r):
+            return r  # Return the first error found
+        values.append(r.unwrap())
+    return Ok(values)
+
+
+def combine_errors[T, E](results: Sequence[Result[T, E]]) -> Result[list[T], list[E]]:
+    """
+    Aggregates a sequence of Result objects, collecting all errors.
+
+    If all results are Ok, returns an Ok containing a list of all success values.
+    If any result is an Err, returns an Err containing a list of all error values.
 
     Args:
         results: A sequence of Result objects.
 
     Returns:
-        A single Result object.
+        A single Result. Ok(list of success values) or Err(list of all errors).
     """
     values: list[T] = []
+    errors: list[E] = []
     for r in results:
         match r:
             case Ok(value):
                 values.append(value)
-            case Err():
-                # Return the first error found
-                return r
-    # If the loop completes without returning, all were Ok.
-    return Ok(tuple(values))
+            case Err(error):
+                errors.append(error)
+
+    if errors:
+        return Err(errors)
+
+    return Ok(values)
 
 
 class ResultAwaitable[T, E]:

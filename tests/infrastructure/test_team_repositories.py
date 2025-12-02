@@ -15,8 +15,8 @@ from app.domain.value_objects import TeamId, TeamName
 async def test_team_repository_save_and_get(uow: IUnitOfWork) -> None:
     """Test saving and retrieving a team."""
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Alpha Team"),
+        id=TeamId.generate().unwrap(),
+        name=TeamName.from_primitive("Alpha Team").unwrap(),
     )
 
     # Save team
@@ -48,7 +48,7 @@ async def test_team_repository_get_non_existent_raises_error(
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         result = await repo.get_by_id(
-            TeamId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV")
+            TeamId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap()
         )
         assert isinstance(result, Err)
 
@@ -57,8 +57,8 @@ async def test_team_repository_get_non_existent_raises_error(
 async def test_team_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting a team via the repository."""
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("ToDelete Team"),
+        id=TeamId.generate().unwrap(),
+        name=TeamName.from_primitive("ToDelete Team").unwrap(),
     )
 
     # 1. Create team
@@ -91,8 +91,8 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     before_creation = datetime.now(UTC)
 
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Timestamp Team"),
+        id=TeamId.generate().unwrap(),
+        name=TeamName.from_primitive("Timestamp Team").unwrap(),
     )
 
     async with uow:
@@ -115,8 +115,8 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing team."""
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Update Team"),
+        id=TeamId.generate().unwrap(),
+        name=TeamName.from_primitive("Update Team").unwrap(),
     )
 
     async with uow:
@@ -130,7 +130,7 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
 
     await asyncio.sleep(0.01)
 
-    saved_team.name = TeamName.from_primitive("Updated Team")
+    saved_team.name = TeamName.from_primitive("Updated Team").unwrap()
 
     async with uow:
         repo = uow.GetRepository(Team)

@@ -40,11 +40,19 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
         self, request: GetUserQuery
     ) -> Result[GetUserResult, UseCaseError]:
         """Get user by ID, returning a DTO within a Result."""
+        user_id_result = UserId.from_primitive(request.user_id)
+        if isinstance(user_id_result, Err):
+            return Err(
+                UseCaseError(
+                    type=ErrorType.VALIDATION_ERROR,
+                    message="Invalid User ID format.",
+                )
+            )
+        user_id = user_id_result.unwrap()
+
         async with self._uow:
             user_repo = self._uow.GetRepository(User, UserId)
-            user_result = await user_repo.get_by_id(
-                UserId.from_primitive(request.user_id)
-            )
+            user_result = await user_repo.get_by_id(user_id)
 
             match user_result:
                 case Ok(user):

@@ -18,9 +18,9 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
     async with uow:
         repo = uow.GetRepository(User, str)
         user = User(
-            id=UserId.generate(),
+            id=UserId.generate().unwrap(),
             name="Bob",
-            email=Email.from_primitive("bob@example.com"),
+            email=Email.from_primitive("bob@example.com").unwrap(),
         )
         save_result = await repo.add(user)
         assert isinstance(save_result, Ok)

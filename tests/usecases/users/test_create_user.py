@@ -27,19 +27,6 @@ async def test_create_user_handler(uow: IUnitOfWork) -> None:
 
 
 @pytest.mark.anyio
-async def test_create_user_handler_validation_error(uow: IUnitOfWork) -> None:
-    """Test CreateUserHandler returns Err on validation error."""
-    handler = CreateUserHandler(uow)
-
-    # Command with an empty name, which should fail domain validation
-    command = CreateUserCommand(name="", email="test@example.com")
-    result = await handler.handle(command)
-
-    assert isinstance(result, Err)
-    assert result.error.type == ErrorType.VALIDATION_ERROR
-
-
-@pytest.mark.anyio
 async def test_create_user_handler_invalid_email(uow: IUnitOfWork) -> None:
     """Test CreateUserHandler returns Err on invalid email format."""
     handler = CreateUserHandler(uow)

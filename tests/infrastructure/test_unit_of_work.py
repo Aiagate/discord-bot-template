@@ -12,9 +12,9 @@ from app.domain.value_objects import Email, UserId
 async def test_uow_rollback(uow: IUnitOfWork) -> None:
     """Test that the Unit of Work rolls back transactions on error."""
     user = User(
-        id=UserId.generate(),
+        id=UserId.generate().unwrap(),
         name="Rollback Test",
-        email=Email.from_primitive("rollback@example.com"),
+        email=Email.from_primitive("rollback@example.com").unwrap(),
     )
     initial_user = None
 

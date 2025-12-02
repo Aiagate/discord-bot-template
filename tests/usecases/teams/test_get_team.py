@@ -15,8 +15,8 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
     """Test GetTeamHandler retrieves existing team."""
     # First, create a team
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Alpha Team"),
+        id=TeamId.generate().unwrap(),
+        name=TeamName.from_primitive("Alpha Team").unwrap(),
     )
 
     async with uow:

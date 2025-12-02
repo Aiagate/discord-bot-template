@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlmodel import Field, SQLModel
 
+from app.core.result import Ok, Result
 from app.infrastructure.orm_mapping import (
     ORMMappingRegistry,
     entity_to_orm_dict,
@@ -26,12 +27,12 @@ class DummyId:
         return self._value
 
     @classmethod
-    def from_primitive(cls, value: str) -> "DummyId":
-        return cls(_value=value)
+    def from_primitive(cls, value: str) -> Result["DummyId", ValueError]:
+        return Ok(cls(_value=value))
 
     @classmethod
-    def generate(cls) -> "DummyId":
-        return cls(_value="generated-id")
+    def generate(cls) -> Result["DummyId", ValueError]:
+        return Ok(cls(_value="generated-id"))
 
 
 @dataclass(frozen=True)
@@ -44,8 +45,8 @@ class DummyEmail:
         return self._value
 
     @classmethod
-    def from_primitive(cls, value: str) -> "DummyEmail":
-        return cls(_value=value)
+    def from_primitive(cls, value: str) -> Result["DummyEmail", ValueError]:
+        return Ok(cls(_value=value))
 
 
 class DummyORM(SQLModel, table=True):  # type: ignore[call-arg]

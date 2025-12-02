@@ -139,7 +139,7 @@ def test_combine_all_ok() -> None:
     combined = combine(results)
 
     assert isinstance(combined, Ok)
-    assert combined.value == (1, 2, 3)
+    assert combined.value == [1, 2, 3]
 
 
 def test_combine_with_err() -> None:

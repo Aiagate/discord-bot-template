@@ -40,11 +40,19 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
         self, request: GetTeamQuery
     ) -> Result[GetTeamResult, UseCaseError]:
         """Get team by ID, returning a DTO within a Result."""
+        team_id_result = TeamId.from_primitive(request.team_id)
+        if isinstance(team_id_result, Err):
+            return Err(
+                UseCaseError(
+                    type=ErrorType.VALIDATION_ERROR,
+                    message="Invalid Team ID format.",
+                )
+            )
+        team_id = team_id_result.unwrap()
+
         async with self._uow:
             team_repo = self._uow.GetRepository(Team, TeamId)
-            team_result = await team_repo.get_by_id(
-                TeamId.from_primitive(request.team_id)
-            )
+            team_result = await team_repo.get_by_id(team_id)
 
             match team_result:
                 case Ok(team):

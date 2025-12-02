@@ -5,6 +5,8 @@ from typing import TypeVar
 
 from ulid import ULID
 
+from app.core.result import Err, Ok, Result
+
 T = TypeVar("T", bound="BaseId")
 
 
@@ -27,13 +29,13 @@ class BaseId:
     _value: ULID
 
     @classmethod
-    def generate(cls: type[T]) -> T:
+    def generate(cls: type[T]) -> Result[T, Exception]:
         """Generate a new ULID-based ID.
 
         Returns:
             A new ID instance with a generated ULID
         """
-        return cls(_value=ULID())
+        return Ok(cls(_value=ULID()))
 
     def to_primitive(self) -> str:
         """Convert to primitive string type for persistence.
@@ -44,7 +46,7 @@ class BaseId:
         return str(self._value)
 
     @classmethod
-    def from_primitive(cls: type[T], value: str) -> T:
+    def from_primitive(cls: type[T], value: str) -> Result[T, Exception]:
         """Create ID from primitive string.
 
         Args:
@@ -57,9 +59,9 @@ class BaseId:
             ValueError: If the string is not a valid ULID
         """
         try:
-            return cls(_value=ULID.from_str(value))
+            return Ok(cls(_value=ULID.from_str(value)))
         except ValueError as e:
-            raise ValueError(f"Invalid ULID string: {value}") from e
+            return Err(ValueError(f"Invalid ULID string: {value}", e))
 
     def __str__(self) -> str:
         """String representation."""

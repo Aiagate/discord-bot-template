@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from app.core.result import Err, Ok, Result
+
 
 @dataclass(frozen=True)
 class TeamName:
@@ -19,20 +21,6 @@ class TeamName:
     MIN_LENGTH: int = 1
     MAX_LENGTH: int = 100
 
-    def __post_init__(self) -> None:
-        """Validate team name."""
-        if not self._value:
-            raise ValueError("Team name cannot be empty.")
-        if len(self._value) < self.MIN_LENGTH:
-            raise ValueError(
-                f"Team name must be at least {self.MIN_LENGTH} characters long."
-            )
-        if len(self._value) > self.MAX_LENGTH:
-            raise ValueError(f"Team name must not exceed {self.MAX_LENGTH} characters.")
-        # 前後の空白をチェック
-        if self._value != self._value.strip():
-            raise ValueError("Team name cannot have leading or trailing whitespace.")
-
     def to_primitive(self) -> str:
         """Convert to primitive string type for persistence.
 
@@ -42,7 +30,7 @@ class TeamName:
         return self._value
 
     @classmethod
-    def from_primitive(cls, value: str) -> "TeamName":
+    def from_primitive(cls, value: str) -> Result["TeamName", Exception]:
         """Create TeamName from primitive string.
 
         Args:
@@ -54,7 +42,24 @@ class TeamName:
         Raises:
             ValueError: If the string is not a valid team name
         """
-        return cls(_value=value)
+        if not value:
+            return Err(ValueError("Team name cannot be empty."))
+        if len(value) < cls.MIN_LENGTH:
+            return Err(
+                ValueError(
+                    f"Team name must be at least {cls.MIN_LENGTH} characters long."
+                )
+            )
+        if len(value) > cls.MAX_LENGTH:
+            return Err(
+                ValueError(f"Team name must not exceed {cls.MAX_LENGTH} characters.")
+            )
+        # 前後の空白をチェック
+        if value != value.strip():
+            return Err(
+                ValueError("Team name cannot have leading or trailing whitespace.")
+            )
+        return Ok(cls(_value=value))
 
     def __str__(self) -> str:
         """String representation."""

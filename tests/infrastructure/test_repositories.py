@@ -17,7 +17,7 @@ async def test_repository_get_non_existent_raises_error(uow: IUnitOfWork) -> Non
     async with uow:
         repo = uow.GetRepository(User, UserId)
         result = await repo.get_by_id(
-            UserId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV")
+            UserId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap()
         )
         assert isinstance(result, Err)
 
@@ -26,9 +26,9 @@ async def test_repository_get_non_existent_raises_error(uow: IUnitOfWork) -> Non
 async def test_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting an entity via the repository."""
     user = User(
-        id=UserId.generate(),
+        id=UserId.generate().unwrap(),
         name="ToDelete",
-        email=Email.from_primitive("delete@example.com"),
+        email=Email.from_primitive("delete@example.com").unwrap(),
     )
     saved_user_result = None
 
@@ -63,9 +63,9 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     before_creation = datetime.now(UTC)
 
     user = User(
-        id=UserId.generate(),
+        id=UserId.generate().unwrap(),
         name="TimestampTest",
-        email=Email.from_primitive("timestamp@example.com"),
+        email=Email.from_primitive("timestamp@example.com").unwrap(),
     )
 
     async with uow:
@@ -88,9 +88,9 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing entity."""
     user = User(
-        id=UserId.generate(),
+        id=UserId.generate().unwrap(),
         name="UpdateTest",
-        email=Email.from_primitive("update@example.com"),
+        email=Email.from_primitive("update@example.com").unwrap(),
     )
 
     async with uow:
@@ -104,7 +104,7 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
 
     await asyncio.sleep(0.01)
 
-    saved_user.email = Email.from_primitive("updated@example.com")
+    saved_user.email = Email.from_primitive("updated@example.com").unwrap()
 
     async with uow:
         repo = uow.GetRepository(User)  # IRepository[User] - add only
