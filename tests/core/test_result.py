@@ -114,23 +114,6 @@ def test_usecase_error_str() -> None:
     assert str(error) == "Resource not found"
 
 
-def test_ok_is_ok_property() -> None:
-    """Test that Ok.is_ok returns True."""
-    result: Ok[int] = Ok(42)
-
-    assert result.is_ok is True
-    assert result.is_err is False
-
-
-def test_err_is_err_property() -> None:
-    """Test that Err.is_err returns True."""
-    error = UseCaseError(type=ErrorType.NOT_FOUND, message="Not found")
-    result: Err[UseCaseError] = Err(error)
-
-    assert result.is_ok is False
-    assert result.is_err is True
-
-
 def test_combine_all_ok() -> None:
     """Test that combine returns Ok with tuple of values when all are Ok."""
     from app.core.result import combine

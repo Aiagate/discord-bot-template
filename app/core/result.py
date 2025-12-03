@@ -2,7 +2,7 @@
 
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Never, TypeGuard, TypeVar
+from typing import Any, Never, TypeGuard, TypeVar
 
 T = TypeVar("T")  # Success type
 E = TypeVar("E")  # Error type
@@ -14,14 +14,6 @@ class Ok[T]:
     """Represents a successful result."""
 
     value: T
-
-    @property
-    def is_ok(self) -> Literal[True]:
-        return True
-
-    @property
-    def is_err(self) -> Literal[False]:
-        return False
 
     def map[V](self, f: Callable[[T], V]) -> "Ok[V]":
         """
@@ -73,14 +65,6 @@ class Err[E]:
 
     error: E
 
-    @property
-    def is_ok(self) -> Literal[False]:
-        return False
-
-    @property
-    def is_err(self) -> Literal[True]:
-        return True
-
     def map[V](self, f: Callable[[Any], Any]) -> "Err[E]":
         """
         Pass through the error unchanged (Railway-oriented programming pattern).
@@ -131,12 +115,12 @@ Result = Ok[T] | Err[E]
 
 def is_ok[T, E](result: Result[T, E]) -> TypeGuard[Ok[T]]:
     """Return true if the result is ok."""
-    return result.is_ok
+    return isinstance(result, Ok)
 
 
 def is_err[T, E](result: Result[T, E]) -> TypeGuard[Err[E]]:
     """Return true if the result is an error."""
-    return result.is_err
+    return isinstance(result, Err)
 
 
 def combine[E](results: Sequence[Result[Any, E]]) -> Result[list[Any], E]:
@@ -177,11 +161,10 @@ def combine_errors[T, E](results: Sequence[Result[T, E]]) -> Result[list[T], lis
     values: list[T] = []
     errors: list[E] = []
     for r in results:
-        match r:
-            case Ok(value):
-                values.append(value)
-            case Err(error):
-                errors.append(error)
+        if is_err(r):
+            errors.append(r.error)
+        else:
+            values.append(r.unwrap())
 
     if errors:
         return Err(errors)
