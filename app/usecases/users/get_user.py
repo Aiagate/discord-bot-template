@@ -4,7 +4,7 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result
+from app.core.result import Err, Ok, Result, is_err
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import UserId
@@ -41,7 +41,7 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
     ) -> Result[GetUserResult, UseCaseError]:
         """Get user by ID, returning a DTO within a Result."""
         user_id_result = UserId.from_primitive(request.user_id)
-        if isinstance(user_id_result, Err):
+        if is_err(user_id_result):
             return Err(
                 UseCaseError(
                     type=ErrorType.VALIDATION_ERROR,
@@ -54,17 +54,17 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
             user_repo = self._uow.GetRepository(User, UserId)
             user_result = await user_repo.get_by_id(user_id)
 
-            match user_result:
-                case Ok(user):
-                    logger.debug("GetUserHandler: user=%s", user)
-                    user_dto = UserDTO(
-                        id=user.id.to_primitive(),
-                        name=user.name,
-                        email=user.email.to_primitive(),
-                    )
-                    return Ok(GetUserResult(user_dto))
-                case Err(repo_error):
-                    uc_error = UseCaseError(
-                        type=ErrorType.NOT_FOUND, message=repo_error.message
-                    )
-                    return Err(uc_error)
+            if is_err(user_result):
+                uc_error = UseCaseError(
+                    type=ErrorType.NOT_FOUND, message=user_result.error.message
+                )
+                return Err(uc_error)
+
+            user = user_result.unwrap()
+            logger.debug("GetUserHandler: user=%s", user)
+            user_dto = UserDTO(
+                id=user.id.to_primitive(),
+                name=user.name,
+                email=user.email.to_primitive(),
+            )
+            return Ok(GetUserResult(user_dto))

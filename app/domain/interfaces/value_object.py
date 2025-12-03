@@ -2,6 +2,8 @@
 
 from typing import Protocol, TypeVar, runtime_checkable
 
+from app.core.result import Result
+
 T = TypeVar("T")
 
 
@@ -38,16 +40,13 @@ class IValueObject(Protocol[T]):
         ...
 
     @classmethod
-    def from_primitive(cls, value: T) -> "IValueObject[T]":
+    def from_primitive(cls, value: T) -> Result["IValueObject[T]", Exception]:
         """Create value object from primitive type.
 
         Args:
             value: The primitive value from the database.
 
         Returns:
-            A new instance of the value object.
-
-        Raises:
-            ValueError: If the primitive value is invalid.
+            Result[IValueObject[T], Exception] - Ok with new instance or Err with validation error.
         """
         ...

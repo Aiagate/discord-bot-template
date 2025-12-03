@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.core.result import Err, Ok
+from app.core.result import is_err, is_ok
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import Email, UserId
@@ -23,17 +23,17 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
             email=Email.from_primitive("bob@example.com").unwrap(),
         )
         save_result = await repo.add(user)
-        assert isinstance(save_result, Ok)
+        assert is_ok(save_result)
         saved_user = save_result.value
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
 
     # Test: Get user via handler
     handler = GetUserHandler(uow)
     query = GetUserQuery(user_id=saved_user.id.to_primitive())
     result = await handler.handle(query)
 
-    assert isinstance(result, Ok)
+    assert is_ok(result)
     assert result.value.user.id == saved_user.id.to_primitive()
     assert result.value.user.name == "Bob"
     assert result.value.user.email == "bob@example.com"
@@ -46,5 +46,5 @@ async def test_get_user_handler_not_found(uow: IUnitOfWork) -> None:
     query = GetUserQuery(user_id="01ARZ3NDEKTSV4RRFFQ69G5FAV")  # Non-existent ULID
     result = await handler.handle(query)
 
-    assert isinstance(result, Err)
+    assert is_err(result)
     assert result.error.type == ErrorType.NOT_FOUND

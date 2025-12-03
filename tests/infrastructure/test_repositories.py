@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.result import Err, Ok
+from app.core.result import Err, Ok, is_err
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import Email, UserId
@@ -19,7 +19,7 @@ async def test_repository_get_non_existent_raises_error(uow: IUnitOfWork) -> Non
         result = await repo.get_by_id(
             UserId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap()
         )
-        assert isinstance(result, Err)
+        assert is_err(result)
 
 
 @pytest.mark.anyio

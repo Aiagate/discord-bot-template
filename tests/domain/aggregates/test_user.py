@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.result import Err
+from app.core.result import is_err
 from app.domain.aggregates.user import User
 from app.domain.value_objects import Email, UserId
 
@@ -74,5 +74,5 @@ def test_user_with_explicit_timestamps() -> None:
 def test_creation_with_invalid_email_returns_err() -> None:
     """Test that creating user with invalid email raises ValueError."""
     result = Email.from_primitive("invalid-email")
-    assert isinstance(result, Err)
+    assert is_err(result)
     assert "Invalid email format" in str(result.error)

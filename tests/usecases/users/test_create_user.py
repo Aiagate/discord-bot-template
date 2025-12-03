@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.result import Err, Ok
+from app.core.result import Err, is_err, is_ok
 from app.domain.repositories import IUnitOfWork, RepositoryError, RepositoryErrorType
 from app.usecases.result import ErrorType
 from app.usecases.users.create_user import (
@@ -21,7 +21,7 @@ async def test_create_user_handler(uow: IUnitOfWork) -> None:
     command = CreateUserCommand(name="Alice", email="alice@example.com")
     result = await handler.handle(command)
 
-    assert isinstance(result, Ok)
+    assert is_ok(result)
     assert result.value.user_id  # ULID string should exist
     assert len(result.value.user_id) == 26  # ULID is 26 characters
 
@@ -35,7 +35,7 @@ async def test_create_user_handler_invalid_email(uow: IUnitOfWork) -> None:
     command = CreateUserCommand(name="Test User", email="invalid-email")
     result = await handler.handle(command)
 
-    assert isinstance(result, Err)
+    assert is_err(result)
     assert result.error.type == ErrorType.VALIDATION_ERROR
     assert "Invalid email format" in result.error.message
 
@@ -65,6 +65,6 @@ async def test_create_user_handler_repository_error() -> None:
     command = CreateUserCommand(name="Test User", email="test@example.com")
     result = await handler.handle(command)
 
-    assert isinstance(result, Err)
+    assert is_err(result)
     assert result.error.type == ErrorType.UNEXPECTED
     assert "Database connection failed" in result.error.message

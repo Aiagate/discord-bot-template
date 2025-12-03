@@ -4,7 +4,7 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result
+from app.core.result import Err, Ok, Result, is_err
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId
@@ -41,7 +41,7 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
     ) -> Result[GetTeamResult, UseCaseError]:
         """Get team by ID, returning a DTO within a Result."""
         team_id_result = TeamId.from_primitive(request.team_id)
-        if isinstance(team_id_result, Err):
+        if is_err(team_id_result):
             return Err(
                 UseCaseError(
                     type=ErrorType.VALIDATION_ERROR,
@@ -54,16 +54,16 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
             team_repo = self._uow.GetRepository(Team, TeamId)
             team_result = await team_repo.get_by_id(team_id)
 
-            match team_result:
-                case Ok(team):
-                    logger.debug("GetTeamHandler: team=%s", team)
-                    team_dto = TeamDTO(
-                        id=team.id.to_primitive(),
-                        name=team.name.to_primitive(),
-                    )
-                    return Ok(GetTeamResult(team_dto))
-                case Err(repo_error):
-                    uc_error = UseCaseError(
-                        type=ErrorType.NOT_FOUND, message=repo_error.message
-                    )
-                    return Err(uc_error)
+            if is_err(team_result):
+                uc_error = UseCaseError(
+                    type=ErrorType.NOT_FOUND, message=team_result.error.message
+                )
+                return Err(uc_error)
+
+            team = team_result.unwrap()
+            logger.debug("GetTeamHandler: team=%s", team)
+            team_dto = TeamDTO(
+                id=team.id.to_primitive(),
+                name=team.name.to_primitive(),
+            )
+            return Ok(GetTeamResult(team_dto))
