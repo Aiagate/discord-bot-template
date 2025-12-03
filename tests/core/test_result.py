@@ -138,6 +138,95 @@ def test_combine_with_err() -> None:
     assert combined.error is error1
 
 
+def test_combine_empty_sequence() -> None:
+    """Test that combine returns Ok with empty list for empty sequence."""
+    from app.core.result import Result, combine
+
+    results: list[Result[int, UseCaseError]] = []
+    combined = combine(results)
+
+    assert isinstance(combined, Ok)
+    assert combined.value == []
+
+
+def test_combine_single_ok() -> None:
+    """Test that combine returns Ok with single-element list for one Ok."""
+    from app.core.result import combine
+
+    results = [Ok(42)]
+    combined = combine(results)
+
+    assert isinstance(combined, Ok)
+    assert combined.value == [42]
+
+
+def test_combine_single_err() -> None:
+    """Test that combine returns the Err when given a single Err."""
+    from app.core.result import combine
+
+    error = UseCaseError(type=ErrorType.NOT_FOUND, message="Not found")
+    results = [Err(error)]
+    combined = combine(results)
+
+    assert isinstance(combined, Err)
+    assert combined.error is error
+
+
+def test_combine_multiple_errors_returns_first() -> None:
+    """Test that combine returns first Err when multiple errors exist."""
+    from app.core.result import combine
+
+    error1 = UseCaseError(type=ErrorType.NOT_FOUND, message="First")
+    error2 = UseCaseError(type=ErrorType.VALIDATION_ERROR, message="Second")
+    error3 = UseCaseError(type=ErrorType.UNEXPECTED, message="Third")
+    results = [Err(error1), Err(error2), Err(error3)]
+    combined = combine(results)
+
+    assert isinstance(combined, Err)
+    assert combined.error is error1
+    assert combined.error.message == "First"
+
+
+def test_combine_preserves_string_type() -> None:
+    """Test that combine preserves type of Ok values (string example)."""
+    from app.core.result import combine
+
+    results = [Ok("hello"), Ok("world"), Ok("test")]
+    combined = combine(results)
+
+    assert isinstance(combined, Ok)
+    assert combined.value == ["hello", "world", "test"]
+
+
+def test_combine_error_after_ok_values() -> None:
+    """Test that combine returns first Err even after Ok values."""
+    from app.core.result import combine
+
+    error = UseCaseError(type=ErrorType.VALIDATION_ERROR, message="Failed")
+    results = [Ok(1), Ok(2), Err(error), Ok(4)]
+    combined = combine(results)
+
+    assert isinstance(combined, Err)
+    assert combined.error is error
+
+
+def test_is_ok_returns_true_for_ok() -> None:
+    """Test that is_ok returns True for Ok result."""
+    from app.core.result import is_ok
+
+    result = Ok(42)
+    assert is_ok(result) is True
+
+
+def test_is_ok_returns_false_for_err() -> None:
+    """Test that is_ok returns False for Err result."""
+    from app.core.result import Result, is_ok
+
+    error = UseCaseError(type=ErrorType.NOT_FOUND, message="Not found")
+    result: Result[int, UseCaseError] = Err(error)
+    assert is_ok(result) is False
+
+
 def test_ok_and_then_returns_new_result() -> None:
     """Test that Ok.and_then applies the function and returns the new Result."""
     result: Ok[int] = Ok(5)
