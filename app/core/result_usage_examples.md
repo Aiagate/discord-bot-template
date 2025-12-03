@@ -152,3 +152,91 @@ process_with_combine()
 - **2つ**の`Result`には、**タプルでのパターンマッチ**が簡潔で有効。
 - **3つ以上**の`Result`には、**`combine`関数**を利用するのが最もクリーンでスケールする解決策です。
   パターンCの「ループによる逐次チェック」は`combine`関数の内部実装を理解するためのものであり、直接コードに記述することは**非推奨**です。
+
+---
+
+## 3. 異なる型のResultを組み合わせる（ヘテロジニアス型）
+
+`combine`関数は、異なる型の`Result`を扱うこともできます。この場合、**タプル**で渡すことで、各要素の型が保持されます。
+
+### 基本的な使い方
+
+```python
+from app.core.result import Result, Ok, Err, combine
+from app.usecases.result import UseCaseError, ErrorType
+
+def validate_user_creation(
+    name: str,
+    age: int
+) -> Result[tuple[str, int], UseCaseError]:
+    """ユーザー作成時のバリデーション"""
+    # 各フィールドを個別に検証
+    name_result: Result[str, UseCaseError] = validate_name(name)
+    age_result: Result[int, UseCaseError] = validate_age(age)
+
+    # タプルで渡すと、異なる型(str, int)を一つにまとめられる
+    combined = combine((name_result, age_result))
+
+    match combined:
+        case Ok((valid_name, valid_age)):
+            # valid_nameはstr型、valid_ageはint型として推論される
+            return Ok((valid_name, valid_age))
+        case Err(error):
+            return Err(error)
+```
+
+### メリット
+
+1. **型安全性**: 各要素の型が正しく推論される（`any`にならない）
+2. **スケーラビリティ**: 最大10個までの異なる型を組み合わせ可能
+3. **コンパイル時チェック**: Pyrightが型の不一致を検出
+
+### 実例：複数フィールドのバリデーション
+
+```python
+def create_user_account(
+    user_id: str,
+    email: str,
+    age: str,
+    is_premium: str,
+) -> Result[UserAccount, UseCaseError]:
+    # 各フィールドをバリデーション（型変換含む）
+    uid_result: Result[int, UseCaseError] = parse_user_id(user_id)
+    email_result: Result[str, UseCaseError] = validate_email(email)
+    age_result: Result[int, UseCaseError] = parse_age(age)
+    premium_result: Result[bool, UseCaseError] = parse_bool(is_premium)
+
+    # 4つの異なる型を組み合わせる
+    combined = combine((uid_result, email_result, age_result, premium_result))
+    # 型: Result[tuple[int, str, int, bool], UseCaseError]
+
+    match combined:
+        case Ok((uid, mail, user_age, is_premium)):
+            # uid: int, mail: str, user_age: int, is_premium: bool
+            return Ok(UserAccount(uid, mail, user_age, is_premium))
+        case Err(error):
+            return Err(error)  # 最初のエラーを返す
+```
+
+### 同じ型の場合はリストも使える
+
+```python
+# 同じ型の場合はリストでもOK（後方互換性）
+results = [Ok(1), Ok(2), Ok(3)]
+combined = combine(results)
+# 型: Result[tuple[int, ...], E]
+# 値: Ok((1, 2, 3))
+```
+
+### タプル vs リスト
+
+| 用途 | 使用方法 | 型推論 |
+|------|---------|--------|
+| **異なる型** | タプル `combine((res1, res2))` | `Result[tuple[T1, T2], E]` |
+| **同じ型** | リストまたはタプル `combine([res1, res2])` | `Result[tuple[T, ...], E]` |
+
+### 注意点
+
+- **戻り値はタプル**: `combine`は常にタプル（`tuple`）を返します（以前は`list`でしたが変更されました）
+- **最初のエラーを返す**: 複数のエラーがある場合、最初に見つかったエラーが返されます
+- **エラー型は統一**: すべての`Result`のエラー型`E`は同じである必要があります

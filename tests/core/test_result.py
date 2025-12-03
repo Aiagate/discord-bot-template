@@ -122,7 +122,7 @@ def test_combine_all_ok() -> None:
     combined = combine(results)
 
     assert isinstance(combined, Ok)
-    assert combined.value == [1, 2, 3]
+    assert combined.value == (1, 2, 3)
 
 
 def test_combine_with_err() -> None:
@@ -139,25 +139,25 @@ def test_combine_with_err() -> None:
 
 
 def test_combine_empty_sequence() -> None:
-    """Test that combine returns Ok with empty list for empty sequence."""
+    """Test that combine returns Ok with empty tuple for empty sequence."""
     from app.core.result import Result, combine
 
     results: list[Result[int, UseCaseError]] = []
     combined = combine(results)
 
     assert isinstance(combined, Ok)
-    assert combined.value == []
+    assert combined.value == ()
 
 
 def test_combine_single_ok() -> None:
-    """Test that combine returns Ok with single-element list for one Ok."""
+    """Test that combine returns Ok with single-element tuple for one Ok."""
     from app.core.result import combine
 
     results = [Ok(42)]
     combined = combine(results)
 
     assert isinstance(combined, Ok)
-    assert combined.value == [42]
+    assert combined.value == (42,)
 
 
 def test_combine_single_err() -> None:
@@ -195,7 +195,7 @@ def test_combine_preserves_string_type() -> None:
     combined = combine(results)
 
     assert isinstance(combined, Ok)
-    assert combined.value == ["hello", "world", "test"]
+    assert combined.value == ("hello", "world", "test")
 
 
 def test_combine_error_after_ok_values() -> None:
@@ -225,6 +225,85 @@ def test_is_ok_returns_false_for_err() -> None:
     error = UseCaseError(type=ErrorType.NOT_FOUND, message="Not found")
     result: Result[int, UseCaseError] = Err(error)
     assert is_ok(result) is False
+
+
+def test_combine_heterogeneous_two_types() -> None:
+    """Test that combine handles two different types correctly."""
+    from app.core.result import Result, combine
+
+    user_id: Result[int, UseCaseError] = Ok(123)
+    email: Result[str, UseCaseError] = Ok("user@example.com")
+
+    combined = combine((user_id, email))
+
+    assert isinstance(combined, Ok)
+    assert combined.value == (123, "user@example.com")
+    user_id_val, email_val = combined.value
+    assert isinstance(user_id_val, int)
+    assert isinstance(email_val, str)
+
+
+def test_combine_heterogeneous_three_types() -> None:
+    """Test that combine handles three different types correctly."""
+    from app.core.result import Result, combine
+
+    name: Result[str, UseCaseError] = Ok("Alice")
+    age: Result[int, UseCaseError] = Ok(30)
+    active: Result[bool, UseCaseError] = Ok(True)
+
+    combined = combine((name, age, active))
+
+    assert isinstance(combined, Ok)
+    assert combined.value == ("Alice", 30, True)
+    name_val, age_val, active_val = combined.value
+    assert name_val == "Alice"
+    assert age_val == 30
+    assert active_val is True
+
+
+def test_combine_heterogeneous_with_error() -> None:
+    """Test that combine returns first error with heterogeneous types."""
+    from app.core.result import Result, combine
+
+    error = UseCaseError(type=ErrorType.VALIDATION_ERROR, message="Invalid age")
+    name: Result[str, UseCaseError] = Ok("Bob")
+    age: Result[int, UseCaseError] = Err(error)
+    active: Result[bool, UseCaseError] = Ok(False)
+
+    combined = combine((name, age, active))
+
+    assert isinstance(combined, Err)
+    assert combined.error is error
+
+
+def test_combine_homogeneous_list_still_works() -> None:
+    """Test that combine still works for homogeneous lists (backward compat)."""
+    from app.core.result import combine
+
+    results = [Ok(1), Ok(2), Ok(3), Ok(4)]
+    combined = combine(results)
+
+    assert isinstance(combined, Ok)
+    assert combined.value == (1, 2, 3, 4)
+
+
+def test_combine_complex_heterogeneous_types() -> None:
+    """Test combine with complex heterogeneous types."""
+    from app.core.result import Result, combine
+
+    user_id: Result[int, UseCaseError] = Ok(456)
+    email: Result[str, UseCaseError] = Ok("test@example.com")
+    age: Result[int, UseCaseError] = Ok(25)
+    is_active: Result[bool, UseCaseError] = Ok(True)
+
+    combined = combine((user_id, email, age, is_active))
+
+    assert isinstance(combined, Ok)
+    uid, mail, user_age, active = combined.value
+    assert uid == 456
+    assert mail == "test@example.com"
+    assert user_age == 25
+    assert active is True
 
 
 def test_ok_and_then_returns_new_result() -> None:

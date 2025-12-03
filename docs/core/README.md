@@ -198,20 +198,22 @@ from app.core.result import combine
 
 results = [Ok(1), Ok(2), Ok(3)]
 combined = combine(results)
-# -> Ok([1, 2, 3])
+# -> Ok((1, 2, 3))  # タプルで返される
 
 results = [Ok(1), Err("error"), Ok(3)]
 combined = combine(results)
-# -> Err("error") - 最初のエラーを返す
+# -> Err("error")  # 最初のエラーを返す
 ```
 
 **なぜcombine？**
 - 複数の独立した処理を並行実行後、結果をまとめる際に便利
 - 一つでも失敗したら全体が失敗（All or Nothing）
-- **型安全性**: `combine[T, E](results: Sequence[Result[T, E]]) -> Result[list[T], E]`
-  - すべての`Result`が同じ成功型`T`を持つことを保証
+- **型安全性**: `combine`は2つのパターンをサポート
+  - 同じ型: `combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]`
+  - 異なる型: `combine[T1, T2, E](results: tuple[Result[T1, E], Result[T2, E]]) -> Result[tuple[T1, T2], E]`
+  - すべての`Result`のエラー型`E`は同じである必要がある
 
-**使用例：複数のバリデーション**
+**使用例：複数のバリデーション（同じ型）**
 
 ```python
 def validate_user_data(
@@ -226,10 +228,74 @@ def validate_user_data(
     combined = combine([name_result, email_result, age_result])
 
     match combined:
-        case Ok([valid_name, valid_email, valid_age]):
+        case Ok((valid_name, valid_email, valid_age)):
             return Ok((valid_name, valid_email, valid_age))
         case Err(error):
             return Err(error)  # 最初のエラーを返す
+```
+
+#### 異なる型の組み合わせ（ヘテロジニアス型）
+
+`combine`は異なる型の`Result`も扱えます。この場合、**タプル**で渡します：
+
+```python
+# 実例：ユーザーIDとメールアドレスのバリデーション
+user_id: Result[int, UseCaseError] = validate_user_id("123")
+email: Result[str, UseCaseError] = validate_email("user@example.com")
+
+# タプルで渡すと、異なる型を組み合わせられる
+combined = combine((user_id, email))
+# 型: Result[tuple[int, str], UseCaseError]
+
+match combined:
+    case Ok((uid, mail)):
+        # uid: int（int型として推論される）
+        # mail: str（str型として推論される）
+        return create_user(uid, mail)
+    case Err(error):
+        return Err(error)
+```
+
+**使用例：複数フィールドのバリデーション**
+
+```python
+def validate_profile(
+    name: str, age: int, email: str, is_active: bool
+) -> Result[ValidatedProfile, UseCaseError]:
+    # 各フィールドを個別に検証
+    name_result = validate_name(name)
+    age_result = validate_age(age)
+    email_result = validate_email(email)
+    active_result = validate_boolean(is_active)
+
+    # 4つの異なる型を組み合わせる
+    combined = combine((name_result, age_result, email_result, active_result))
+
+    match combined:
+        case Ok((valid_name, valid_age, valid_email, valid_active)):
+            return Ok(ValidatedProfile(
+                name=valid_name,    # str
+                age=valid_age,      # int
+                email=valid_email,  # str
+                active=valid_active # bool
+            ))
+        case Err(error):
+            return Err(error)
+```
+
+**メリット：**
+- 各要素の型が保持される（型安全性）
+- 最大10個まで対応
+- Pyrightによるコンパイル時の型チェックが機能
+- パターンマッチングとの親和性が高い
+
+**同じ型の場合**:
+```python
+# 同じ型の場合はリストまたはタプルで渡せます
+results = [Ok(1), Ok(2), Ok(3)]
+combined = combine(results)
+# 型: Result[tuple[int, ...], E]
+# 値: Ok((1, 2, 3))
 ```
 
 ### 2. すべてのエラーを収集：`combine_errors`
