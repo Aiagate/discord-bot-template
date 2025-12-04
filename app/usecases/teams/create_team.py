@@ -41,13 +41,26 @@ class CreateTeamHandler(
         self, request: CreateTeamCommand
     ) -> Result[CreateTeamResult, UseCaseError]:
         """Create new team and return as DTO within a Result."""
-        try:
-            team_name = TeamName.from_primitive(request.name)
-            team = Team(id=TeamId.generate(), name=team_name)
-        except ValueError as e:
-            # Handle potential validation errors from the domain
-            error = UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
+        team_id_result = TeamId.generate()
+        team_name_result = TeamName.from_primitive(request.name)
+
+        if is_err(team_id_result):
+            return Err(
+                UseCaseError(
+                    type=ErrorType.UNEXPECTED, message="Failed to generate Team ID."
+                )
+            )
+
+        if is_err(team_name_result):
+            error = UseCaseError(
+                type=ErrorType.VALIDATION_ERROR, message=str(team_name_result.error)
+            )
             return Err(error)
+
+        team_id = team_id_result.unwrap()
+        team_name = team_name_result.unwrap()
+
+        team = Team(id=team_id, name=team_name)
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team)

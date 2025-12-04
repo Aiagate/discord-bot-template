@@ -2,7 +2,16 @@
 
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Never, TypeGuard, TypeVar
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Never, TypeVar, overload
+
+if TYPE_CHECKING:
+    from typing_extensions import TypeIs
+else:
+    try:
+        from typing import TypeIs
+    except ImportError:
+        from typing_extensions import TypeIs
 
 T = TypeVar("T")  # Success type
 E = TypeVar("E")  # Error type
@@ -10,18 +19,26 @@ U = TypeVar("U")  # Success type for map/and_then
 
 
 @dataclass(frozen=True)
+class AggregateErr[E](Exception):
+    """
+    Represents multiple errors collected during a validation process.
+
+    Used primarily with combine_all to collect all validation errors
+    so users can see all issues at once, rather than one at a time.
+    """
+
+    exceptions: list[E]
+
+    def __str__(self) -> str:
+        """Return a string representation of the aggregate error."""
+        return f"Multiple errors occurred ({len(self.exceptions)}): {self.exceptions}"
+
+
+@dataclass(frozen=True)
 class Ok[T]:
     """Represents a successful result."""
 
     value: T
-
-    @property
-    def is_ok(self) -> Literal[True]:
-        return True
-
-    @property
-    def is_err(self) -> Literal[False]:
-        return False
 
     def map[V](self, f: Callable[[T], V]) -> "Ok[V]":
         """
@@ -66,20 +83,27 @@ class Ok[T]:
         """
         return self.value
 
+    def expect(self, msg: str) -> T:
+        """
+        Return the value.
+
+        Compatible with Err.expect signature to allow usage without type guards,
+        but requires a message explaining why success is expected.
+
+        Args:
+            msg: Message explaining why this Result is expected to be Ok (for consistency)
+
+        Returns:
+            The wrapped value
+        """
+        return self.value
+
 
 @dataclass(frozen=True)
 class Err[E]:
     """Represents a failure result."""
 
     error: E
-
-    @property
-    def is_ok(self) -> Literal[False]:
-        return False
-
-    @property
-    def is_err(self) -> Literal[True]:
-        return True
 
     def map[V](self, f: Callable[[Any], Any]) -> "Err[E]":
         """
@@ -110,33 +134,193 @@ class Err[E]:
         """
         return self
 
-    def unwrap(self) -> Never:
+    def expect(self, msg: str) -> Never:
         """
-        Raise the error as an exception.
+        Raise an exception with the provided message.
+
+        Used when you want to assert that this Result should be Ok.
+        Requires a message explaining why the Result was expected to be Ok.
+
+        Args:
+            msg: Message explaining why this was expected to be Ok
 
         Raises:
-            The error object (must be an Exception subclass)
+            RuntimeError: Always raised with the provided message and underlying error
 
-        Raises:
-            RuntimeError: If error is not an Exception
+        Example:
+            result.expect("User should exist in database")
         """
         if isinstance(self.error, Exception):
-            raise self.error
-        else:
-            raise RuntimeError(f"Error: {self.error}")
+            raise RuntimeError(f"{msg}: {self.error}") from self.error
+        raise RuntimeError(f"{msg}: {self.error}")
 
 
 Result = Ok[T] | Err[E]
 
 
-def is_ok[T, E](result: Result[T, E]) -> TypeGuard[Ok[T]]:
-    """Return true if the result is ok."""
-    return result.is_ok
+def is_ok[T, E](result: Result[T, E]) -> TypeIs[Ok[T]]:
+    """
+    Return true if the result is ok.
+
+    Uses TypeIs for bidirectional type narrowing - when this returns False,
+    the type checker knows the result must be Err.
+    """
+    return isinstance(result, Ok)
 
 
-def is_err[T, E](result: Result[T, E]) -> TypeGuard[Err[E]]:
-    """Return true if the result is an error."""
-    return result.is_err
+def is_err[T, E](result: Result[T, E]) -> TypeIs[Err[E]]:
+    """
+    Return true if the result is an error.
+
+    Uses TypeIs for bidirectional type narrowing - when this returns False,
+    the type checker knows the result must be Ok.
+    """
+    return isinstance(result, Err)
+
+
+def safe[T](func: Callable[..., T]) -> Callable[..., Result[T, Exception]]:
+    """
+    Decorator to convert a function that raises exceptions into one that returns a Result.
+
+    This is inspired by the @safe decorator from dry-python/returns.
+    It wraps any exceptions raised by the decorated function into an Err.
+
+    Args:
+        func: Function that may raise exceptions
+
+    Returns:
+        A wrapped function that returns Result[T, Exception] instead of raising
+
+    Example:
+        @safe
+        def risky_operation(x: int) -> int:
+            if x < 0:
+                raise ValueError("Negative number")
+            return x * 2
+
+        result = risky_operation(-5)  # Returns Err(ValueError("Negative number"))
+        result = risky_operation(5)   # Returns Ok(10)
+    """
+
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Result[T, Exception]:
+        try:
+            return Ok(func(*args, **kwargs))
+        except Exception as e:
+            return Err(e)
+
+    return wrapper
+
+
+@overload
+def combine[E](results: tuple[()]) -> Result[tuple[()], E]: ...
+
+
+@overload
+def combine[T1, E](
+    results: tuple[Result[T1, E]],
+) -> Result[tuple[T1], E]: ...
+
+
+@overload
+def combine[T1, T2, E](
+    results: tuple[Result[T1, E], Result[T2, E]],
+) -> Result[tuple[T1, T2], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, E](
+    results: tuple[Result[T1, E], Result[T2, E], Result[T3, E]],
+) -> Result[tuple[T1, T2, T3], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, E](
+    results: tuple[Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E]],
+) -> Result[tuple[T1, T2, T3, T4], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, T5, E](
+    results: tuple[
+        Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E], Result[T5, E]
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, T5, T6, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, T5, T6, T7, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, T5, T6, T7, T8, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+        Result[T8, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+        Result[T8, E],
+        Result[T9, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9], E]: ...
+
+
+@overload
+def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+        Result[T8, E],
+        Result[T9, E],
+        Result[T10, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10], E]: ...
 
 
 def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
@@ -150,17 +334,177 @@ def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
         results: A sequence of Result objects.
 
     Returns:
-        A single Result object.
+        A single Result object. Ok(tuple of success values) or the first Err.
+
+    Examples:
+        Heterogeneous types (use tuple):
+        >>> user_id: Result[int, str] = Ok(123)
+        >>> email: Result[str, str] = Ok("user@example.com")
+        >>> combine((user_id, email))
+        Ok((123, "user@example.com"))
+
+        Homogeneous types (use list or tuple):
+        >>> results = [Ok(1), Ok(2), Ok(3)]
+        >>> combine(results)
+        Ok((1, 2, 3))
+
+        Error handling (first error returned):
+        >>> results = [Ok(1), Err("error"), Ok(3)]
+        >>> combine(results)
+        Err("error")
     """
     values: list[T] = []
     for r in results:
-        match r:
-            case Ok(value):
-                values.append(value)
-            case Err():
-                # Return the first error found
-                return r
-    # If the loop completes without returning, all were Ok.
+        if is_err(r):
+            return r  # Return the first error found
+        values.append(r.unwrap())
+    return Ok(tuple(values))
+
+
+@overload
+def combine_all[T1, E](
+    results: tuple[Result[T1, E]],
+) -> Result[tuple[T1], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, E](
+    results: tuple[Result[T1, E], Result[T2, E]],
+) -> Result[tuple[T1, T2], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, E](
+    results: tuple[Result[T1, E], Result[T2, E], Result[T3, E]],
+) -> Result[tuple[T1, T2, T3], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, E](
+    results: tuple[Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E]],
+) -> Result[tuple[T1, T2, T3, T4], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, T5, E](
+    results: tuple[
+        Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E], Result[T5, E]
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, T5, T6, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, T5, T6, T7, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+        Result[T8, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+        Result[T8, E],
+        Result[T9, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9], AggregateErr[E]]: ...
+
+
+@overload
+def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E](
+    results: tuple[
+        Result[T1, E],
+        Result[T2, E],
+        Result[T3, E],
+        Result[T4, E],
+        Result[T5, E],
+        Result[T6, E],
+        Result[T7, E],
+        Result[T8, E],
+        Result[T9, E],
+        Result[T10, E],
+    ],
+) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10], AggregateErr[E]]: ...
+
+
+def combine_all[T, E](
+    results: tuple[Result[T, E], ...],
+) -> Result[tuple[T, ...], AggregateErr[E]]:
+    """
+    Aggregates a tuple of Results, collecting all errors.
+
+    If all results are Ok, returns an Ok containing a tuple of all success values.
+    If any result is an Err, returns an Err containing an AggregateErr with all errors.
+
+    This is a "fail complete" strategy - useful for validation where you want to show
+    all errors to the user at once, rather than one at a time.
+
+    Args:
+        results: A tuple of Result objects.
+
+    Returns:
+        Ok(tuple of success values) if all succeed,
+        or Err(AggregateErr(list of errors)) if any fail.
+
+    Example:
+        >>> from app.core.result import combine_all, Ok, Err
+        >>> results = (Ok(1), Err("error1"), Ok(3), Err("error2"))
+        >>> combined = combine_all(results)
+        >>> # Returns Err(AggregateErr(["error1", "error2"]))
+    """
+    values: list[T] = []
+    errors: list[E] = []
+
+    for r in results:
+        if is_err(r):
+            errors.append(r.error)
+        else:
+            values.append(r.unwrap())
+
+    if errors:
+        return Err(AggregateErr(errors))
+
     return Ok(tuple(values))
 
 
@@ -259,6 +603,12 @@ class ResultAwaitable[T, E]:
 
         async def unwrapped() -> T:
             _result: Result[T, E] = await self
-            return _result.unwrap()
+            if is_ok(_result):
+                return _result.unwrap()
+            # Since Err.unwrap() is removed, raise the error explicitly
+            # TypeIs ensures that if not is_ok, then it must be Err
+            if isinstance(_result.error, Exception):
+                raise _result.error
+            raise RuntimeError(f"unwrap called on Err in async chain: {_result.error}")
 
         return unwrapped()
