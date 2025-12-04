@@ -26,7 +26,7 @@
 
 ### 4. **クリーンアーキテクチャ**
 
-- ユースケース層 (`usecases/`) とリポジトリ層 (`repository.py`) を明確に分離。
+- ユースケース層 (`usecases/`) とドメイン層 (`domain/`) を明確に分離。
 - ビジネスロジックとインフラストラクチャの独立性を確保。
 - ドメイン層 (`domain/`) とインフラストラクチャ層 (`infrastructure/`) を完全分離。
 
@@ -48,7 +48,7 @@
 
 ### 8. **テスト環境の整備**
 
-- `pytest`と`anyio`を使用したテスト環境を構築。
+- `pytest`と`pytest-asyncio`を使用したテスト環境を構築。
 - `pytest-cov`によるコードカバレッジ測定。
 - インメモリSQLiteを使用した高速なテスト実行。
 
@@ -64,31 +64,39 @@
 .
 ├── app/                           # アプリケーション本体
 │   ├── __main__.py                # エントリーポイント
-│   ├── cogs/                      # Cogモジュール
+│   ├── cogs/                      # Cogモジュール (users_cog.py, teams_cog.py)
+│   ├── core/                      # アプリケーションコア (Resultクラスなど)
 │   ├── container.py               # DIコンテナ設定
 │   ├── mediator.py                # Mediatorパターンの実装
-│   ├── repository.py              # リポジトリインターフェース
 │   ├── domain/                    # ドメイン層
-│   │   └── aggregates/            # ドメイン集約
-│   │       └── user.py            # User集約
+│   │   ├── aggregates/            # ドメイン集約 (user.py, team.py)
+│   │   ├── interfaces/            # 抽象インターフェース
+│   │   ├── repositories/          # リポジトリインターフェース
+│   │   └── value_objects/         # 値オブジェクト
 │   ├── infrastructure/            # インフラストラクチャ層
 │   │   ├── database.py            # DB設定・セッション管理
-│   │   ├── orm_models/            # ORMモデル
-│   │   │   └── user_orm.py        # UserテーブルのORMモデル
+│   │   ├── orm_models/            # ORMモデル (user_orm.py, team_orm.py)
 │   │   └── repositories/          # リポジトリ実装
-│   │       └── user_repository.py # SQLModelリポジトリ
 │   └── usecases/                  # ユースケース層
-│       └── users.py               # ユーザー関連のユースケース
+│       ├── users/                 # ユーザー関連ユースケース
+│       └── teams/                 # チーム関連ユースケース
 ├── alembic/                       # Alembicマイグレーション
-│   ├── env.py                     # Alembic環境設定
 │   └── versions/                  # マイグレーションファイル
+├── docs/                          # ドキュメント
+│   ├── ARCHITECTURE.md
+│   └── domain/
+│       └── DOMAIN_IMPLEMENTATION_GUIDE.md
 ├── tests/                         # テストコード
 │   ├── conftest.py                # pytest設定・フィクスチャ
-│   ├── test_user_repository.py    # リポジトリテスト
-│   └── test_users_usecase.py      # ユースケーステスト
+│   ├── core/
+│   ├── domain/
+│   │   ├── aggregates/
+│   │   └── value_objects/
+│   ├── infrastructure/
+│   └── usecases/
+│       ├── users/
+│       └── teams/
 ├── .pre-commit-config.yaml        # Pre-commit設定
-├── .vscode/                       # VSCode設定
-├── alembic.ini                    # Alembic設定ファイル
 ├── pyproject.toml                 # プロジェクト設定
 └── README.md                      # このファイル
 ```
@@ -117,7 +125,7 @@
 3. Pre-commit フックをインストール:
 
    ```bash
-   uv run --frozen pre-commit install
+   uv run pre-commit install
    ```
 
 4. 環境変数を設定:
@@ -187,44 +195,46 @@ uv run alembic history
 
 ```bash
 # 全テスト実行
-uv run --frozen pytest
+uv run pytest
 
 # カバレッジ付きで実行
-uv run --frozen pytest --cov=app --cov-report=term-missing
+uv run pytest --cov=app --cov-report=term-missing
 
 # 特定のテストファイルのみ実行
-uv run --frozen pytest tests/test_user_repository.py
+uv run pytest tests/infrastructure/test_repositories.py
 
 # 詳細な出力
-uv run --frozen pytest -v
+uv run pytest -v
 ```
 
 ## コード品質チェック
 
 ```bash
 # フォーマット
-uv run --frozen ruff format .
+uv run ruff format .
 
 # リントチェック
-uv run --frozen ruff check .
+uv run ruff check .
 
 # リント自動修正
-uv run --frozen ruff check . --fix
+uv run ruff check . --fix
 
 # 型チェック
-uv run --frozen pyright
+uv run pyright
 
 # 全チェック実行
-uv run --frozen ruff format . && \
-uv run --frozen ruff check . --fix && \
-uv run --frozen pyright && \
-uv run --frozen pytest
+uv run ruff format . && \
+uv run ruff check . --fix && \
+uv run pyright && \
+uv run pytest
 ```
 
 ## 利用可能なDiscordコマンド
 
 - `!users get <user_id>`: ユーザー情報を取得
 - `!users create <name> <email>`: 新規ユーザーを作成
+- `!teams get <team_id>`: チーム情報を取得
+- `!teams create <name>`: 新規チームを作成
 
 ## アーキテクチャ
 

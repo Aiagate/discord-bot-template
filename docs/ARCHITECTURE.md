@@ -78,22 +78,22 @@ Presentation ──▶ Application ──▶ Domain ◀── Infrastructure
 `app/domain/aggregates/user.py`:
 
 ```python
-from dataclasses import dataclass
+from app.domain.value_objects import Email, UserId
 
 @dataclass
 class User:
     """User aggregate root."""
 
-    id: int
+    id: UserId
     name: str
-    email: str
+    email: Email
 
     def __post_init__(self) -> None:
         # ドメインルールの検証
         if not self.name:
             raise ValueError("User name cannot be empty.")
 
-    def change_email(self, new_email: str) -> "User":
+    def change_email(self, new_email: Email) -> "User":
         """ビジネスロジック: メールアドレス変更"""
         self.email = new_email
         return self
@@ -102,12 +102,12 @@ class User:
 **ポイント**:
 
 - ビジネスルールを `__post_init__` で検証
-- イミュータブル（変更メソッドは新しいインスタンスを返す）
+- **Value Objects** (`UserId`, `Email`) を使用して型安全性を向上
 - リッチドメインモデル（データだけでなく振る舞いを持つ）
 
 ##### 1.2 Repository Interfaces（リポジトリインターフェース）
 
-`app/repository.py`:
+`app/domain/repositories/interfaces.py`:
 
 ```python
 from abc import ABC, abstractmethod
@@ -146,6 +146,7 @@ class IRepositoryWithId[T, K](IRepository[T], ABC):
 不要であることが判明しました。
 
 `ABC` ベースの明示的継承により、以下の利点が得られます:
+
 - 型安全性の向上（クラス定義時にエラー検出）
 - IDEサポートの改善（自動補完、リファクタリング）
 - 開発者の意図の明確化
@@ -176,18 +177,18 @@ Result = Ok[T] | Err[E]
 
 - Rust の Result型にインスパイア
 - 例外ではなく値でエラーを表現
-- パターンマッチングで処理分岐
+- `map`, `and_then`, `unwrap` などのメソッドチェーンで安全な処理を実現
 
 **使用例**:
 
 ```python
-result = await user_repo.get_by_id(user_id)
-
-match result:
-    case Ok(user):
-        print(f"Found: {user.name}")
-    case Err(error):
-        print(f"Error: {error.message}")
+# teams_cog.py の例
+message = await (
+    Mediator.send_async(CreateTeamCommand(name=name))
+    .and_then(lambda r: Mediator.send_async(GetTeamQuery(r.team_id)))
+    .map(lambda v: f"Team Created: ID: {v.team.id}, Name: {v.team.name}")
+    .unwrap()
+)
 ```
 
 ---
@@ -221,9 +222,9 @@ match result:
 `app/usecases/users/get_user.py`:
 
 ```python
-# 1. Query（リクエスト）
+# 1. Query（リクエスト）- IDはstringで受け取る
 class GetUserQuery(Request[Result[GetUserResult, UseCaseError]]):
-    def __init__(self, user_id: int) -> None:
+    def __init__(self, user_id: str) -> None:
         self.user_id = user_id
 
 # 2. Result（レスポンス）
@@ -238,24 +239,30 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
         self._uow = uow
 
     async def handle(self, request: GetUserQuery) -> Result[GetUserResult, UseCaseError]:
+        # 文字列からValue Objectへの変換
+        user_id_result = UserId.from_primitive(request.user_id)
+        if is_err(user_id_result):
+            return Err(UseCaseError(type=ErrorType.VALIDATION_ERROR, ...))
+
+        user_id = user_id_result.unwrap()
+
         async with self._uow:
-            user_repo = self._uow.GetRepository(User, int)
-            user_result = await user_repo.get_by_id(request.user_id)
+            # リポジトリにはValue Objectでアクセス
+            user_repo = self._uow.GetRepository(User, UserId)
+            user_result = await user_repo.get_by_id(user_id)
 
             match user_result:
                 case Ok(user):
+                    # Domain -> DTO への変換
                     user_dto = UserDTO(
-                        id=user.id,
+                        id=user.id.to_primitive(),
                         name=user.name,
-                        email=user.email
+                        email=user.email.to_primitive()
                     )
                     return Ok(GetUserResult(user_dto))
                 case Err(repo_error):
-                    uc_error = UseCaseError(
-                        type=ErrorType.NOT_FOUND,
-                        message=repo_error.message
-                    )
-                    return Err(uc_error)
+                    return Err(UseCaseError.from_repo_error(repo_error))
+
 ```
 
 **ポイント**:
@@ -264,6 +271,7 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
 - **DTO（Data Transfer Object）**: プレゼンテーション層との境界
 - **依存性注入**: `@inject` デコレータで IUnitOfWork を注入
 - **トランザクション**: `async with self._uow` でトランザクション管理
+- **入力バリデーション**: Handler内で文字列をValue Objectに変換し、不正な値を弾く
 
 `app/usecases/users/create_user.py` (Command例):
 
@@ -286,8 +294,17 @@ class CreateUserHandler(RequestHandler[CreateUserCommand, Result[CreateUserResul
         self._uow = uow
 
     async def handle(self, request: CreateUserCommand) -> Result[CreateUserResult, UseCaseError]:
-        # エンティティ作成
-        user = User(id=UserId.generate(), name=request.name, email=Email.from_primitive(request.email))
+        # Value Objectの生成とドメインルールの検証
+        user_result = Ok(User(
+            id=UserId.generate().unwrap(),
+            name=request.name,
+            email=Email.from_primitive(request.email).unwrap()
+        ))
+
+        if is_err(user_result):
+            return Err(UseCaseError(...)) # エラー処理
+
+        user = user_result.unwrap()
 
         async with self._uow:
             user_repo = self._uow.GetRepository(User)
@@ -295,40 +312,44 @@ class CreateUserHandler(RequestHandler[CreateUserCommand, Result[CreateUserResul
 
             match save_result:
                 case Ok(saved_user):
-                    # IDのみを返す
+                    # IDのみを文字列で返す
                     return Ok(CreateUserResult(saved_user.id.to_primitive()))
                 case Err(repo_error):
-                    return Err(UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message))
+                    return Err(UseCaseError.from_repo_error(repo_error))
 ```
 
-**Createの設計パターン**: Create系のユースケースはIDのみを返します。プレゼンテーション層（Cog）では、返されたIDを使ってGetユースケースを呼び出すことで、詳細情報を取得します：
+**Createの設計パターン**: CreateユースケースはIDのみを返します。プレゼンテーション層（Cog）では、返されたIDを使ってGetユースケースを呼び出すことで、詳細情報を取得します。このフローは `Result` 型の `and_then` メソッドを使うことで、よりクリーンに実装できます。
 
 ```python
-# app/cogs/users_cog.py
-@users.command(name="create")
-async def users_create(self, ctx: commands.Context[commands.Bot], name: str, email: str) -> None:
-    # 1. Createを実行してIDを取得
-    command = CreateUserCommand(name=name, email=email)
-    result = await Mediator.send_async(command)
-
-    match result:
-        case Ok(ok_value):
-            # 2. 返されたIDでGetを実行
-            query = GetUserQuery(user_id=ok_value.user_id)
-            get_result = await Mediator.send_async(query)
-
-            match get_result:
-                case Ok(get_ok_value):
-                    # 3. 結果を表示（表示ロジックがGetに一元化される）
-                    message = f"User Created:\nID: {get_ok_value.user.id}\nName: {get_ok_value.user.name}\n..."
-                    await ctx.send(content=message)
+# app/cogs/teams_cog.py
+@teams.command(name="create")
+async def teams_create(self, ctx: commands.Context[commands.Bot], name: str) -> None:
+    """Create new team. Usage: !teams create <name>"""
+    message = await (
+        # 1. Createを実行してIDを取得
+        Mediator.send_async(CreateTeamCommand(name=name))
+        # 2. 成功すれば、返されたIDでGetを実行
+        .and_then(
+            lambda result: Mediator.send_async(GetTeamQuery(result.team_id))
+        )
+        # 3. Getの成功結果をメッセージにフォーマット
+        .map(
+            lambda value: (
+                f"Team Created:\nID: {value.team.id}\nName: {value.team.name}"
+            )
+        )
+        # 4. 最終的な結果 (成功メッセージ or エラー) を取り出す
+        .unwrap()
+    )
+    await ctx.send(content=message)
 ```
 
 この設計により：
+
 - Createは「作成してIDを返す」という単一責任に専念
 - Getは「詳細情報の取得と形式化」という単一責任に専念
 - 結果の表示形式を変更する場合、Getの実装のみを変更すればよい（OCP）
-- テストが容易（各ユースケースを独立してテスト可能）
+- `and_then`でフローが明確になり、ネストが深くならない
 
 ##### 2.2 Mediator Pattern（メディエーターパターン）
 
@@ -357,7 +378,7 @@ class Mediator:
 
 ```python
 # Discord Cog から
-query = GetUserQuery(user_id=123)
+query = GetUserQuery(user_id="01H...Z")
 result = await Mediator.send_async(query)
 ```
 
@@ -369,7 +390,7 @@ result = await Mediator.send_async(query)
 @dataclass(frozen=True)
 class UserDTO:
     """User Data Transfer Object."""
-    id: int
+    id: str  # ULID
     name: str
     email: str
 ```
@@ -378,7 +399,8 @@ class UserDTO:
 
 - イミュータブル（`frozen=True`）
 - ドメイン集約とは別物（表示用）
-- プレゼンテーション層に公開する情報のみ含む
+- プレゼンテーション層に公開する情報はプリミティブ型（`str`, `int`など）
+- Value Objectは `to_primitive()` で変換されて格納される
 
 ---
 
@@ -399,24 +421,30 @@ class UserDTO:
 `app/infrastructure/orm_models/user_orm.py`:
 
 ```python
-from sqlmodel import SQLModel, Field
+from datetime import datetime
+from sqlalchemy import Column, DateTime, func
+from sqlmodel import Field, SQLModel
 
 class UserORM(SQLModel, table=True):
     """User table ORM model."""
     __tablename__ = "users"
 
-    id: int | None = Field(default=None, primary_key=True)
+    id: str | None = Field(default=None, primary_key=True, max_length=26)
     name: str = Field(max_length=255, index=True)
     email: str = Field(max_length=255, unique=True, index=True)
-    created_at: str | None = Field(default=None)
-    updated_at: str | None = Field(default=None)
+    created_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+    )
+    updated_at: datetime = Field(
+        sa_column=Column(DateTime(timezone=True), server_default=func.now())
+    )
 ```
 
 **ポイント**:
 
 - **ドメイン集約とは完全に分離**
 - データベーステーブルの表現
-- SQLAlchemy の制約・インデックスを定義
+- IDはULIDのため `str` 型、タイムスタンプは `datetime` 型
 
 ##### 3.2 Generic Repository
 
@@ -424,87 +452,51 @@ class UserORM(SQLModel, table=True):
 
 ```python
 class GenericRepository[T, K](IRepositoryWithId[T, K]):
-    """汎用リポジトリ実装 - IRepositoryWithId[T, K]を明示的に実装"""
+    """汎用リポジトリ実装"""
 
     def __init__(
         self,
         session: AsyncSession,
         entity_type: type[T],
-        key_type: type[K] | None
     ) -> None:
         self._session = session
         self._entity_type = entity_type
-        self._key_type = key_type
         self._orm_type = ORMMappingRegistry.get_orm_type(entity_type)
 
     async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
-        statement = select(self._orm_type).where(self._orm_type.id == id)
+        # Value Object をプリミティブ型に変換して検索
+        primitive_id = id.to_primitive() if isinstance(id, IValueObject) else id
+
+        statement = select(self._orm_type).where(self._orm_type.id == primitive_id)
         result = await self._session.execute(statement)
         orm_instance = result.scalar_one_or_none()
 
         if orm_instance is None:
-            return Err(RepositoryError(...))
+            return Err(RepositoryError(type=RepositoryErrorType.NOT_FOUND, ...))
 
         # ORM → Domain 自動変換
-        return Ok(ORMMappingRegistry.from_orm(orm_instance))
+        return Ok(ORMMappingRegistry.from_orm(orm_instance, self._entity_type))
 ```
 
 **ポイント**:
 
 - 型安全な汎用実装（Generics使用）
-- ORM ↔ Domain の変換を担当
+- ORM ↔ Domain の変換を `ORMMappingRegistry` に委譲
 - Result型でエラーハンドリング
 
-**自動変換機構**:
+##### 3.3 ORM Mapping Registry
 
-ドメイン集約とORMモデル間の変換は、`IValueObject` Protocolを活用して自動的に行われます:
+ドメイン集約とORMモデル間の変換は、`ORMMappingRegistry` によって一元管理されます。
+
+`app/infrastructure/orm_mapping.py`:
 
 ```python
-def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
-    """ドメインエンティティをORM用辞書に変換
-
-    - dataclassのフィールドを走査
-    - IValueObjectフィールドはto_primitive()で変換
-    - プリミティブ型はそのまま使用
-    """
-    if not is_dataclass(entity):
-        raise TypeError(f"Expected dataclass, got {type(entity).__name__}")
-
-    result: dict[str, Any] = {}
-    for field in fields(entity):
-        field_value = getattr(entity, field.name)
-        if isinstance(field_value, IValueObject):
-            result[field.name] = field_value.to_primitive()
-        else:
-            result[field.name] = field_value
-
-    return result
-
-
-def orm_to_entity(orm_instance: SQLModel, entity_type: type[T]) -> T:
-    """ORMモデルをドメインエンティティに変換
-
-    - 型アノテーションを取得
-    - from_primitive()メソッドを持つ型はValue Objectとして変換
-    - プリミティブ型はそのまま使用
-    """
-    type_hints = get_type_hints(entity_type)
-    kwargs: dict[str, Any] = {}
-
-    for field in fields(entity_type):
-        field_type = type_hints[field.name]
-        orm_value = getattr(orm_instance, field.name, None)
-
-        if hasattr(field_type, "from_primitive"):
-            if orm_value is None and field.name == "id":
-                kwargs[field.name] = field_type.generate()
-            else:
-                kwargs[field.name] = field_type.from_primitive(orm_value)
-        else:
-            kwargs[field.name] = orm_value
-
-    return entity_type(**kwargs)
+# registry_orm_mapping(DomainClass, ORMClass) でマッピングを登録
+# from_orm(orm_instance, domain_type) でORMからドメインへ変換
+# to_orm(domain_instance) でドメインからORMへ変換
 ```
+
+このレジストリは、リフレクションと型ヒントを利用して、`IValueObject` を含むドメイン集約とORMモデル間の変換を自動的に行います。これにより、変換ロジックを都度記述する必要がなくなり、保守性が大幅に向上します。
 
 **利点**:
 
@@ -512,8 +504,9 @@ def orm_to_entity(orm_instance: SQLModel, entity_type: type[T]) -> T:
 - **保守性向上**: 新しいValue Objectを追加しても変換コード不要
 - **依存性逆転**: ドメイン層がインフラ層に依存しない
 - **DRY原則**: 変換ロジックの重複を排除
+- **一元管理**: 全てのマッピングを `orm_registry.py` で集中管理
 
-##### 3.3 Unit of Work Pattern
+##### 3.4 Unit of Work Pattern
 
 `app/infrastructure/unit_of_work.py`:
 
@@ -523,37 +516,21 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
-        self._session: AsyncSession | None = None
-        self._repositories: dict[tuple[type, type], Any] = {}
+        # ...
 
-    def GetRepository[T, K](
-        self, entity_type: type[T], key_type: type[K]
-    ) -> IRepository[T, K]:
-        """リポジトリの取得（キャッシュ付き）"""
-        cache_key = (entity_type, key_type)
-
-        if cache_key in self._repositories:
-            return self._repositories[cache_key]
-
-        repository = GenericRepository[T, K](
-            self._session, entity_type, key_type
-        )
-        self._repositories[cache_key] = repository
-        return repository
+    def GetRepository[T, K](...) -> IRepository[T, K]:
+        # リポジトリの取得（キャッシュ付き）
+        # ...
 
     async def __aenter__(self) -> "SQLAlchemyUnitOfWork":
-        self._session = self._session_factory()
-        await self._session.__aenter__()
-        return self
+        # ...
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         if exc_type is None:
             await self.commit()  # 成功時はコミット
         else:
             await self.rollback()  # 例外時はロールバック
-
-        await self._session.__aexit__(exc_type, exc_val, exc_tb)
-        self._repositories.clear()
+        # ...
 ```
 
 **ポイント**:
@@ -562,83 +539,33 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
 - リポジトリのキャッシュ（同一トランザクション内で再利用）
 - 自動コミット/ロールバック（コンテキストマネージャー）
 
-**使用例**:
-
-```python
-async with self._uow:  # トランザクション開始
-    user_repo = self._uow.GetRepository(User, int)
-    result = await user_repo.save(user)
-    # コンテキスト終了時に自動コミット
-```
-
-##### 3.4 Dependency Injection Container
+##### 3.5 Dependency Injection Container
 
 `app/container.py`:
 
 ```python
 from injector import Binder, Module, singleton
+from app.infrastructure.orm_registry import init_orm_mappings
 
 class AppModule(Module):
     """DIコンテナの設定"""
 
     def configure(self, binder: Binder) -> None:
+        # アプリケーション起動時に一度だけORMマッピングを初期化
+        init_orm_mappings()
+
         # セッションファクトリをシングルトンでバインド
-        binder.bind(
-            async_sessionmaker[AsyncSession],
-            to=get_session_factory(),
-            scope=singleton,
-        )
+        binder.bind(async_sessionmaker[AsyncSession], to=get_session_factory(), ...)
 
         # UnitOfWork をリクエストごとに生成
-        binder.bind(
-            IUnitOfWork,
-            to=lambda: SQLAlchemyUnitOfWork(get_session_factory()),
-        )
+        binder.bind(IUnitOfWork, to=SQLAlchemyUnitOfWork)
 ```
 
 **ポイント**:
 
 - `injector` ライブラリを使用
-- シングルトンとリクエストスコープの使い分け
+- `init_orm_mappings()` をコンテナ設定時に呼び出し、マッピングを保証
 - テスト時のモック注入が容易
-
-##### 3.5 ORM Mapping Registry
-
-`app/infrastructure/orm_registry.py`:
-
-```python
-def init_orm_mappings() -> None:
-    """Initialize all ORM mappings."""
-    register_orm_mapping(User, UserORM)
-    register_orm_mapping(Team, TeamORM)
-
-# Auto-register on import
-init_orm_mappings()
-```
-
-**ポイント**:
-
-- **集中管理**: すべてのマッピングを一箇所で管理
-- **自動登録**: モジュールインポート時に自動実行
-- **拡張容易**: 新しい集約追加時はここに1行追加するだけ
-- **明示的**: どの集約がマッピングされているか一目瞭然
-
-**使用方法**:
-
-```python
-# container.py で初期化
-from app.infrastructure.orm_registry import init_orm_mappings
-
-def configure(binder: Binder) -> None:
-    init_orm_mappings()  # マッピング初期化
-    # ... 他のバインディング
-```
-
-**利点**:
-
-- Domain層からInfrastructure層への依存が完全に削除される
-- 新しいAggregateを追加する際の作業が1行で完結
-- 自動変換機構により、変換コードの記述が不要
 
 ---
 
@@ -659,26 +586,24 @@ def configure(binder: Binder) -> None:
 `app/__main__.py`:
 
 ```python
-async def main() -> None:
-    # 環境変数読み込み
-    if os.path.exists(".env.local"):
-        load_dotenv(".env.local", override=True)
-    else:
-        load_dotenv()
+class MyBot(commands.Bot):
+    # ...
+    async def setup_hook(self) -> None:
+        await self._init_database()
+        await self.load_cogs()
 
-    # データベース初期化
-    database_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./bot.db")
-    await init_db(database_url)
+    async def _init_database(self) -> None:
+        # ... DIコンテナとMediatorの初期化
+        injector = Injector([container.configure])
+        Mediator.initialize(injector)
 
-    # Bot作成
-    bot = commands.Bot(command_prefix="!", intents=intents)
+    async def load_cogs(self) -> None:
+        # Cogモジュールをインポートしてロード
+        await self.load_extension(teams_cog.__name__)
+        await self.load_extension(users_cog.__name__)
 
-    # Cog読み込み
-    await bot.load_extension("app.cogs.users_cog")
-
-    # Bot起動
-    token = os.getenv("DISCORD_BOT_TOKEN")
-    await bot.start(token)
+bot = MyBot()
+bot.run(token)
 ```
 
 ##### 4.2 Discord Cogs
@@ -687,20 +612,13 @@ async def main() -> None:
 
 ```python
 class UsersCog(commands.Cog):
-    """User management commands."""
-
-    @commands.group(name="users")
-    async def users(self, ctx: commands.Context[commands.Bot]) -> None:
-        """User commands group."""
-        if ctx.invoked_subcommand is None:
-            await ctx.send("Use: !users get <id> or !users create <name> <email>")
-
+    # ...
     @users.command(name="get")
     async def users_get(
-        self, ctx: commands.Context[commands.Bot], user_id: int
+        self, ctx: commands.Context[commands.Bot], user_id: str
     ) -> None:
         """Get user by ID."""
-        query = GetUserQuery(user_id=user_id)
+        query = GetUserQuery(user_id=user_id) # 文字列でQueryを作成
         result = await Mediator.send_async(query)
 
         match result:
@@ -720,6 +638,7 @@ class UsersCog(commands.Cog):
 - Mediator経由でユースケースを呼び出し
 - Result型でエラーハンドリング
 - Discord用のメッセージフォーマット
+- IDは文字列として受け取る
 
 ---
 
@@ -728,190 +647,96 @@ class UsersCog(commands.Cog):
 ### Query（読み取り）のフロー
 
 ```
-1. Discord User
-   ↓ !users get 123
-2. UsersCog.users_get()
-   ↓ GetUserQuery(user_id=123)
-3. Mediator.send_async()
+1. User: !users get 01H...
    ↓
-4. GetUserHandler.handle()
-   ↓ IUnitOfWork
-5. SQLAlchemyUnitOfWork.GetRepository()
+2. UsersCog: GetUserQuery(user_id="01H...")
    ↓
-6. GenericRepository.get_by_id()
-   ↓ SELECT * FROM users WHERE id = 123
-7. Database (SQLite/PostgreSQL)
-   ↓ UserORM
-8. orm_to_domain()
-   ↓ User (Domain)
-9. User → UserDTO
+3. Mediator -> GetUserHandler
+   ↓ UserId.from_primitive("01H...")
+4. UoW -> GenericRepository.get_by_id(UserId(...))
+   ↓ SELECT ... WHERE id = "01H..."
+5. Database -> UserORM
+   ↓ ORMMappingRegistry.from_orm()
+6. User (Domain) -> UserDTO
    ↓ Ok(GetUserResult(UserDTO))
-10. Match result → format message
-    ↓
-11. Discord User (receives formatted message)
+7. UsersCog: formats message
+   ↓
+8. User: receives message
 ```
 
 ### Command（書き込み）のフロー
 
 ```
-1. Discord User
-   ↓ !users create "Alice" "alice@example.com"
-2. UsersCog.users_create()
-   ↓ CreateUserCommand(name="Alice", email="alice@...")
-3. Mediator.send_async()
+1. User: !teams create "My Team"
    ↓
-4. CreateUserHandler.handle()
-   ↓ User(id=UserId.generate(), name="Alice", email="alice@...")
-5. Domain validation (__post_init__)
+2. TeamsCog: CreateTeamCommand(name="My Team")
    ↓
-6. IUnitOfWork
+3. Mediator -> CreateTeamHandler -> Team(id=TeamId.generate(), ...)
+   ↓ UoW -> GenericRepository.add()
+4. ORMMappingRegistry.to_orm() -> TeamORM
+   ↓ INSERT ...
+5. Database commits
+   ↓ Ok(CreateTeamResult(team_id="01H..."))
+6. TeamsCog: .and_then() is called
+   ↓ GetTeamQuery(team_id="01H...")
+7. (Queryフローと同様の処理)
+   ↓ Ok(GetTeamResult(TeamDTO))
+8. TeamsCog: .map() formats message
    ↓
-7. GenericRepository.add()
-   ↓ entity_to_orm_dict()
-8. UserORM
-   ↓ INSERT INTO users ...
-9. Database
-   ↓ Commit transaction
-10. Ok(CreateUserResult(user_id="01HQXYZ..."))
-    ↓ IDのみを返す
-11. UsersCog.users_create()
-    ↓ GetUserQuery(user_id="01HQXYZ...")
-12. Mediator.send_async()
-    ↓
-13. GetUserHandler.handle()
-    ↓ GenericRepository.get_by_id()
-14. Database
-    ↓ SELECT * FROM users WHERE id = '01HQXYZ...'
-15. UserORM → User (Domain)
-    ↓ orm_to_entity()
-16. User → UserDTO
-    ↓ Ok(GetUserResult(UserDTO))
-17. UsersCog formats message
-    ↓
-18. Discord User (receives formatted success message)
+9. User: receives success message
 ```
 
-**重要**: Create操作は作成したエンティティのIDのみを返します。詳細情報の取得は必ずGet操作を経由することで、表示ロジックが一元化され、SOLID原則（特にSRPとOCP）が守られます。
-
----
-
-## 🎯 設計原則
-
-### 1. SOLID原則の適用
-
-#### Single Responsibility Principle（単一責任の原則）
-
-- 各クラスは単一の責任のみを持つ
-- 例: `GetUserHandler` はユーザー取得のみ、`GenericRepository` はデータアクセスのみ
-
-#### Open/Closed Principle（開放閉鎖の原則）
-
-- 拡張に対して開いている、修正に対して閉じている
-- 例: 新しい集約を追加する際、既存コードを変更せずに済む（Generic Repository）
-
-#### Liskov Substitution Principle（リスコフの置換原則）
-
-- 派生型は基本型と置換可能
-- 例: `SQLAlchemyUnitOfWork` は `IUnitOfWork` と置換可能
-
-#### Interface Segregation Principle（インターフェース分離の原則）
-
-- クライアントは使用しないインターフェースに依存すべきでない
-- 例: `IRepository` は最小限のメソッドのみ定義
-
-#### Dependency Inversion Principle（依存性逆転の原則）
-
-- 上位モジュールは下位モジュールに依存すべきでない、両方とも抽象に依存すべき
-- 例: ユースケースは `IUnitOfWork` に依存、具体的な実装には依存しない
-
-### 2. その他の設計原則
-
-#### DRY（Don't Repeat Yourself）
-
-- Generic Repository で共通処理を一元化
-- Mediator パターンでリクエスト/レスポンス処理を統一
-
-#### YAGNI（You Aren't Gonna Need It）
-
-- 現在必要な機能のみ実装
-- 過度な抽象化を避ける
-
-#### Separation of Concerns（関心の分離）
-
-- 各レイヤーが明確な責務を持つ
-- ドメインロジックとインフラロジックを完全に分離
+**重要**: Create操作は作成したエンティティのIDのみを返します。詳細情報の取得は必ずGet操作を経由することで、表示ロジックが一元化され、SOLID原則（特にSRPとOCP）が守られます。`and_then` を使ったフローにより、この処理が簡潔に表現されます。
 
 ---
 
 ## 🧪 テスト戦略
 
-### テストピラミッド
-
-```
-      ┌──────────┐
-      │   E2E    │  少数（統合テスト）
-      ├──────────┤
-      │   統合    │  中程度（ユースケーステスト）
-      ├──────────┤
-      │ ユニット  │  多数（ドメイン・リポジトリテスト）
-      └──────────┘
-```
-
 ### 1. ユニットテスト
-
-**対象**: ドメイン層、リポジトリ層
 
 `tests/domain/aggregates/test_user.py`:
 
 ```python
-@pytest.mark.anyio
+import pytest
+
+@pytest.mark.asyncio
 async def test_create_user_with_empty_name_raises_error() -> None:
     with pytest.raises(ValueError, match="User name cannot be empty"):
-        User(id=1, name="", email="test@example.com")
+        User(id=UserId.generate().unwrap(), name="", email=Email.from_primitive("a@a.com").unwrap())
 ```
 
-**特徴**:
-
-- 高速（0.44秒で13テスト）
-- インメモリSQLite使用
-- 外部依存なし
-
 ### 2. 統合テスト
-
-**対象**: ユースケース層
 
 `tests/usecases/users/test_get_user.py`:
 
 ```python
-@pytest.mark.anyio
+import pytest
+from app.domain.value_objects import UserId, Email
+
+@pytest.mark.asyncio
 async def test_get_user_handler(uow: IUnitOfWork) -> None:
     # Setup
+    user = User(id=UserId.generate().unwrap(), name="Bob", email=Email.from_primitive("bob@a.com").unwrap())
     async with uow:
-        repo = uow.GetRepository(User, int)
-        user = User(id=0, name="Bob", email="bob@example.com")
-        save_result = await repo.save(user)
+        repo = uow.GetRepository(User, UserId)
+        await repo.add(user)
+        await uow.commit()
 
     # Execute
     handler = GetUserHandler(uow)
-    result = await handler.handle(GetUserQuery(user_id=1))
+    query = GetUserQuery(user_id=user.id.to_primitive())
+    result = await handler.handle(query)
 
     # Assert
-    assert isinstance(result, Ok)
+    assert is_ok(result)
     assert result.value.user.name == "Bob"
 ```
 
 **特徴**:
 
+- テストには `@pytest.mark.asyncio` を使用
 - データベースを含む
 - トランザクション動作の検証
-- Result型の動作確認
-
-### 3. E2Eテスト（TODO）
-
-**対象**: プレゼンテーション層～インフラ層の全体
-
-- Discord Bot の実際のコマンド実行
-- モックDiscordコンテキストを使用
 
 ---
 
@@ -921,26 +746,27 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
 
 ```toml
 [project.dependencies]
-aiosqlite = ">=0.21.0"     # 非同期SQLite
-alembic = ">=1.17.2"       # DBマイグレーション
-discord-py = ">=2.5.2"     # Discord API
-injector = ">=0.22.0"      # 依存性注入
-python-dotenv = ">=1.2.1"  # 環境変数管理
-sqlmodel = ">=0.0.24"      # ORM（SQLAlchemy + Pydantic）
+aiosqlite = ">=0.21.0"
+alembic = ">=1.17.2"
+discord-py = ">=2.5.2"
+injector = ">=0.22.0"
+python-dotenv = ">=1.2.1"
+python-ulid = ">=3.1.0"   # ULID生成
+sqlmodel = ">=0.0.24"
 ```
 
 ### 開発依存関係
 
 ```toml
 [dependency-groups.dev]
-anyio = ">=4.11.0"         # 非同期テストサポート
-pre-commit = ">=4.5.0"     # Git フック
-pyright = ">=1.1.407"      # 型チェッカー
-pytest = ">=8.3.5"         # テストフレームワーク
-pytest-asyncio = ">=1.3.0" # 非同期テスト
-pytest-cov = ">=7.0.0"     # カバレッジ測定
-pytest-mock = ">=3.14.0"   # モック
-ruff = ">=0.14.6"          # リンター・フォーマッター
+# anyio は pytest-asyncio の依存関係として導入されます
+pre-commit = ">=4.5.0"
+pyright = ">=1.1.407"
+pytest = ">=8.3.5"
+pytest-asyncio = ">=1.3.0" # 非同期テストランナー
+pytest-cov = ">=7.0.0"
+pytest-mock = ">=3.14.0"
+ruff = ">=0.14.6"
 ```
 
 ---
@@ -949,15 +775,14 @@ ruff = ">=0.14.6"          # リンター・フォーマッター
 
 ### 新しい集約の追加
 
-1. **ドメイン集約を作成**
+1. **ドメイン集約とValue Objectを作成**
 
 ```python
 # app/domain/aggregates/guild.py
 @dataclass
 class Guild:
-    id: int
+    id: GuildId
     name: str
-    owner_id: int
 ```
 
 2. **ORMモデルを作成**
@@ -966,40 +791,38 @@ class Guild:
 # app/infrastructure/orm_models/guild_orm.py
 class GuildORM(SQLModel, table=True):
     __tablename__ = "guilds"
-    id: int | None = Field(default=None, primary_key=True)
+    id: str | None = Field(default=None, primary_key=True)
     name: str
-    owner_id: int
 ```
 
-3. **マッピングを追加**
+3. **マッピングを登録**
 
 ```python
-# app/infrastructure/repositories/generic_repository.py
-DOMAIN_TO_ORM_MAP: dict[type, type[SQLModel]] = {
-    User: UserORM,
-    Guild: GuildORM,  # 追加
-}
+# app/infrastructure/orm_registry.py
+from app.domain.aggregates.guild import Guild
+from app.infrastructure.orm_models.guild_orm import GuildORM
+
+def init_orm_mappings() -> None:
+    """Initialize all ORM mappings."""
+    register_orm_mapping(User, UserORM)
+    register_orm_mapping(Team, TeamORM)
+    register_orm_mapping(Guild, GuildORM) # ここに追加
 ```
+
+`init_orm_mappings` はアプリ起動時に `app/container.py` から自動で呼び出されるため、ここの追加だけでマッピングは完了します。
 
 4. **ユースケースを作成**
 
 ```python
 # app/usecases/guilds/get_guild.py
-class GetGuildQuery(Request[Result[GetGuildResult, UseCaseError]]):
-    pass
-
-class GetGuildHandler(RequestHandler[...]):
-    pass
+# ... GetGuildQuery, GetGuildHandler などを実装
 ```
 
 5. **Cogを作成**
 
 ```python
 # app/cogs/guilds_cog.py
-class GuildsCog(commands.Cog):
-    @commands.command()
-    async def guild_info(self, ctx):
-        pass
+# ... Mediator経由でユースケースを呼び出すコマンドを実装
 ```
 
 ### データベースマイグレーション
