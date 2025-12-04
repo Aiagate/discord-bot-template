@@ -2,10 +2,11 @@
 
 import logging
 from dataclasses import fields, is_dataclass
-from typing import Any, ClassVar, TypeVar, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from sqlmodel import SQLModel
 
+from app.core.result import Result, is_err, is_ok
 from app.domain.interfaces import IValueObject
 
 logger = logging.getLogger(__name__)
@@ -124,7 +125,11 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
                     kwargs[field_name] = None
                 elif field_name == "id" and hasattr(actual_type, "generate"):
                     # For non-Optional ID fields, generate a new ID
-                    kwargs[field_name] = actual_type.generate()
+                    id_result = actual_type.generate()
+                    if is_err(id_result):
+                        raise ValueError(f"Failed to generate ID: {id_result.error}")
+                    assert is_ok(id_result)  # type: ignore[reportAssertType]
+                    kwargs[field_name] = id_result.unwrap()
                 else:
                     raise ValueError(
                         f"Field '{field_name}' is None but "
@@ -133,7 +138,15 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
                     )
             else:
                 # Convert from primitive using from_primitive()
-                kwargs[field_name] = actual_type.from_primitive(orm_value)
+                result = cast(Result[Any, Any], actual_type.from_primitive(orm_value))
+                if is_err(result):
+                    # This should ideally not happen if data in DB is valid
+                    raise ValueError(
+                        f"Failed to convert field '{field_name}' "
+                        f"from primitive: {result.error}"
+                    )
+                assert is_ok(result)  # type: ignore[reportAssertType]
+                kwargs[field_name] = result.unwrap()
         else:
             # Use primitive value as-is
             kwargs[field_name] = orm_value

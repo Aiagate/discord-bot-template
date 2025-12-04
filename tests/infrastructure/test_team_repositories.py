@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.result import Err, Ok
+from app.core.result import is_err, is_ok
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId, TeamName
@@ -15,26 +15,28 @@ from app.domain.value_objects import TeamId, TeamName
 async def test_team_repository_save_and_get(uow: IUnitOfWork) -> None:
     """Test saving and retrieving a team."""
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Alpha Team"),
+        id=TeamId.generate().expect("TeamId.generate should succeed"),
+        name=TeamName.from_primitive("Alpha Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        ),
     )
 
     # Save team
     async with uow:
         repo = uow.GetRepository(Team)
         save_result = await repo.add(team)
-        assert isinstance(save_result, Ok)
+        assert is_ok(save_result)
         saved_team = save_result.value
         assert saved_team.id == team.id
         assert saved_team.name.to_primitive() == "Alpha Team"
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
 
     # Retrieve team
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         get_result = await repo.get_by_id(saved_team.id)
-        assert isinstance(get_result, Ok)
+        assert is_ok(get_result)
         retrieved_team = get_result.value
         assert retrieved_team.id == saved_team.id
         assert retrieved_team.name.to_primitive() == "Alpha Team"
@@ -48,41 +50,45 @@ async def test_team_repository_get_non_existent_raises_error(
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         result = await repo.get_by_id(
-            TeamId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV")
+            TeamId.from_primitive("01ARZ3NDEKTSV4RRFFQ69G5FAV").expect(
+                "TeamId.from_primitive should succeed for valid ULID"
+            )
         )
-        assert isinstance(result, Err)
+        assert is_err(result)
 
 
 @pytest.mark.anyio
 async def test_team_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting a team via the repository."""
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("ToDelete Team"),
+        id=TeamId.generate().expect("TeamId.generate should succeed"),
+        name=TeamName.from_primitive("ToDelete Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        ),
     )
 
     # 1. Create team
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         saved_team_result = await repo.add(team)
-        assert isinstance(saved_team_result, Ok)
+        assert is_ok(saved_team_result)
         saved_team = saved_team_result.value
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
 
     # 2. Delete team
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         delete_result = await repo.delete(saved_team)
-        assert isinstance(delete_result, Ok)
+        assert is_ok(delete_result)
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
 
     # 3. Verify team is deleted
     async with uow:
         repo = uow.GetRepository(Team, TeamId)
         get_result = await repo.get_by_id(saved_team.id)
-        assert isinstance(get_result, Err)
+        assert is_err(get_result)
 
 
 @pytest.mark.anyio
@@ -91,17 +97,19 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     before_creation = datetime.now(UTC)
 
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Timestamp Team"),
+        id=TeamId.generate().expect("TeamId.generate should succeed"),
+        name=TeamName.from_primitive("Timestamp Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        ),
     )
 
     async with uow:
         repo = uow.GetRepository(Team)
         save_result = await repo.add(team)
-        assert isinstance(save_result, Ok)
+        assert is_ok(save_result)
         saved_team = save_result.value
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
 
     after_creation = datetime.now(UTC)
 
@@ -115,30 +123,34 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing team."""
     team = Team(
-        id=TeamId.generate(),
-        name=TeamName.from_primitive("Update Team"),
+        id=TeamId.generate().expect("TeamId.generate should succeed"),
+        name=TeamName.from_primitive("Update Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        ),
     )
 
     async with uow:
         repo = uow.GetRepository(Team)
         save_result = await repo.add(team)
-        assert isinstance(save_result, Ok)
+        assert is_ok(save_result)
         saved_team = save_result.value
         original_updated_at = saved_team.updated_at
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
 
     await asyncio.sleep(0.01)
 
-    saved_team.name = TeamName.from_primitive("Updated Team")
+    saved_team.name = TeamName.from_primitive("Updated Team").expect(
+        "TeamName.from_primitive should succeed for valid name"
+    )
 
     async with uow:
         repo = uow.GetRepository(Team)
         update_result = await repo.add(saved_team)
-        assert isinstance(update_result, Ok)
+        assert is_ok(update_result)
         updated_team = update_result.value
         commit_result = await uow.commit()
-        assert isinstance(commit_result, Ok)
+        assert is_ok(commit_result)
         # SQLite doesn't support microsecond precision well,
         # so we just check it's not exactly the same
         assert updated_team.updated_at != original_updated_at
