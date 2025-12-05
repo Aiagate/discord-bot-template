@@ -5,7 +5,7 @@ import pytest
 from app.core.result import is_err, is_ok
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import Email, UserId
+from app.domain.value_objects import DisplayName, Email, UserId
 from app.usecases.result import ErrorType
 from app.usecases.users.get_user import GetUserHandler, GetUserQuery
 
@@ -19,7 +19,9 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
         repo = uow.GetRepository(User, str)
         user = User(
             id=UserId.generate().expect("UserId.generate should succeed"),
-            name="Bob",
+            display_name=DisplayName.from_primitive("Bob").expect(
+                "DisplayName.from_primitive should succeed for valid display name"
+            ),
             email=Email.from_primitive("bob@example.com").expect(
                 "Email.from_primitive should succeed for valid email"
             ),
@@ -37,7 +39,7 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
 
     assert is_ok(result)
     assert result.value.user.id == saved_user.id.to_primitive()
-    assert result.value.user.name == "Bob"
+    assert result.value.user.display_name == "Bob"
     assert result.value.user.email == "bob@example.com"
 
 

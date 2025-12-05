@@ -8,5 +8,5 @@ class UserDTO:
     """A plain data structure representing a user."""
 
     id: str
-    name: str
+    display_name: str
     email: str

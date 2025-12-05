@@ -16,7 +16,7 @@ class UserORM(SQLModel, table=True):
     __tablename__ = "users"  # type: ignore[reportAssignmentType]
 
     id: str | None = Field(default=None, primary_key=True, max_length=26)
-    name: str = Field(max_length=255, index=True)
+    display_name: str = Field(max_length=255, index=True)
     email: str = Field(max_length=255, unique=True, index=True)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now())

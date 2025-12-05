@@ -64,7 +64,7 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
             logger.debug("GetUserHandler: user=%s", user)
             user_dto = UserDTO(
                 id=user.id.to_primitive(),
-                name=user.name,
+                display_name=user.display_name.to_primitive(),
                 email=user.email.to_primitive(),
             )
             return Ok(GetUserResult(user_dto))

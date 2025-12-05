@@ -8,7 +8,7 @@ import pytest
 from app.core.result import Err, Ok, is_err
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import Email, UserId
+from app.domain.value_objects import DisplayName, Email, UserId
 
 
 @pytest.mark.anyio
@@ -29,7 +29,9 @@ async def test_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting an entity via the repository."""
     user = User(
         id=UserId.generate().expect("UserId.generate should succeed"),
-        name="ToDelete",
+        display_name=DisplayName.from_primitive("ToDelete").expect(
+            "DisplayName.from_primitive should succeed"
+        ),
         email=Email.from_primitive("delete@example.com").expect(
             "Email.from_primitive should succeed for valid email"
         ),
@@ -68,7 +70,9 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 
     user = User(
         id=UserId.generate().expect("UserId.generate should succeed"),
-        name="TimestampTest",
+        display_name=DisplayName.from_primitive("TimestampTest").expect(
+            "DisplayName.from_primitive should succeed"
+        ),
         email=Email.from_primitive("timestamp@example.com").expect(
             "Email.from_primitive should succeed for valid email"
         ),
@@ -95,7 +99,9 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing entity."""
     user = User(
         id=UserId.generate().expect("UserId.generate should succeed"),
-        name="UpdateTest",
+        display_name=DisplayName.from_primitive("UpdateTest").expect(
+            "DisplayName.from_primitive should succeed"
+        ),
         email=Email.from_primitive("update@example.com").expect(
             "Email.from_primitive should succeed for valid email"
         ),
