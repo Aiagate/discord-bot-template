@@ -226,3 +226,91 @@ async def test_result_awaitable_and_then_error_propagation() -> None:
 
     assert isinstance(final, Err)
     assert final.error is error
+
+
+@pytest.mark.anyio
+async def test_result_awaitable_map_err_ok() -> None:
+    """Test that ResultAwaitable.map_err passes through Ok unchanged."""
+
+    async def get_result() -> Result[int, str]:
+        return Ok(42)
+
+    result = await ResultAwaitable(get_result()).map_err(
+        lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=f"Error: {e}")
+    )
+
+    assert isinstance(result, Ok)
+    assert result.value == 42
+
+
+@pytest.mark.anyio
+async def test_result_awaitable_map_err_err() -> None:
+    """Test that ResultAwaitable.map_err transforms Err value."""
+
+    async def get_result() -> Result[int, str]:
+        return Err("original error")
+
+    result = await ResultAwaitable(get_result()).map_err(
+        lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=f"Wrapped: {e}")
+    )
+
+    assert isinstance(result, Err)
+    assert isinstance(result.error, UseCaseError)
+    assert result.error.type == ErrorType.VALIDATION_ERROR
+    assert result.error.message == "Wrapped: original error"
+
+
+@pytest.mark.anyio
+async def test_result_awaitable_map_err_chain() -> None:
+    """Test that multiple map_err calls can be chained asynchronously."""
+
+    async def get_result() -> Result[int, str]:
+        return Err("base error")
+
+    result = await (
+        ResultAwaitable(get_result())
+        .map_err(lambda e: f"Level 1: {e}")
+        .map_err(lambda e: f"Level 2: {e}")
+        .map_err(lambda e: f"Level 3: {e}")
+    )
+
+    assert isinstance(result, Err)
+    assert result.error == "Level 3: Level 2: Level 1: base error"
+
+
+@pytest.mark.anyio
+async def test_result_awaitable_map_err_with_map_and_then() -> None:
+    """Test that map, and_then, and map_err can be mixed in async chains."""
+
+    async def get_initial() -> Result[int, str]:
+        return Ok(5)
+
+    async def async_double_str(x: int) -> Result[int, str]:
+        """Helper function that returns Result with str error type."""
+        return Ok(x * 2)
+
+    # Test successful chain with Ok
+    final_value = await (
+        ResultAwaitable(get_initial())
+        .map(lambda x: x * 2)  # 10
+        .and_then(async_double_str)  # 20
+        .map_err(lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=e))
+        .map(lambda x: x + 5)  # 25
+        .unwrap()
+    )
+
+    assert final_value == 25
+
+    # Test error chain
+    async def get_error() -> Result[int, str]:
+        return Err("failure")
+
+    result = await (
+        ResultAwaitable(get_error())
+        .map(lambda x: x * 2)  # Skipped
+        .map_err(lambda e: f"Error: {e}")  # Applied
+        .and_then(async_double_str)  # Skipped
+    )
+
+    assert isinstance(result, Err)
+    assert result.error == "Error: failure"

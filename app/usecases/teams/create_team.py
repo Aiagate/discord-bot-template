@@ -4,7 +4,7 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result, is_err
+from app.core.result import Ok, Result, is_err
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId, TeamName
@@ -41,21 +41,20 @@ class CreateTeamHandler(
         self, request: CreateTeamCommand
     ) -> Result[CreateTeamResult, UseCaseError]:
         """Create new team and return as DTO within a Result."""
-        team_id_result = TeamId.generate()
-        team_name_result = TeamName.from_primitive(request.name)
+        team_id_result = TeamId.generate().map_err(
+            lambda _: UseCaseError(
+                type=ErrorType.UNEXPECTED, message="Failed to generate Team ID."
+            )
+        )
+        team_name_result = TeamName.from_primitive(request.name).map_err(
+            lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
+        )
 
         if is_err(team_id_result):
-            return Err(
-                UseCaseError(
-                    type=ErrorType.UNEXPECTED, message="Failed to generate Team ID."
-                )
-            )
+            return team_id_result
 
         if is_err(team_name_result):
-            error = UseCaseError(
-                type=ErrorType.VALIDATION_ERROR, message=str(team_name_result.error)
-            )
-            return Err(error)
+            return team_name_result
 
         team_id = team_id_result.unwrap()
         team_name = team_name_result.unwrap()
@@ -64,20 +63,19 @@ class CreateTeamHandler(
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team)
-            add_result = await team_repo.add(team)
+            add_result = (await team_repo.add(team)).map_err(
+                lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=e.message)
+            )
 
             if is_err(add_result):
-                repo_error = add_result.error
-                return Err(
-                    UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
-                )
+                return add_result
 
-            commit_result = await self._uow.commit()
+            commit_result = (await self._uow.commit()).map_err(
+                lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=e.message)
+            )
+
             if is_err(commit_result):
-                repo_error = commit_result.error
-                return Err(
-                    UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
-                )
+                return commit_result
 
             logger.info("Created team: %s", team)
             team_id = team.id.to_primitive()
