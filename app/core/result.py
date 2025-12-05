@@ -98,6 +98,18 @@ class Ok[T]:
         """
         return self.value
 
+    def map_err[F](self, f: Callable[[Any], F]) -> "Ok[T]":
+        """
+        Pass through the Ok value unchanged.
+
+        Args:
+            f: Function to map error (ignored for Ok).
+
+        Returns:
+            Self (unchanged Ok value).
+        """
+        return self
+
 
 @dataclass(frozen=True)
 class Err[E]:
@@ -153,6 +165,18 @@ class Err[E]:
         if isinstance(self.error, Exception):
             raise RuntimeError(f"{msg}: {self.error}") from self.error
         raise RuntimeError(f"{msg}: {self.error}")
+
+    def map_err[F](self, f: Callable[[E], F]) -> "Err[F]":
+        """
+        Transform the Err value using the provided function.
+
+        Args:
+            f: Function to apply to the Err value (E -> F).
+
+        Returns:
+            Err[F] containing the transformed error.
+        """
+        return Err(f(self.error))
 
 
 Result = Ok[T] | Err[E]
@@ -612,3 +636,27 @@ class ResultAwaitable[T, E]:
             raise RuntimeError(f"unwrap called on Err in async chain: {_result.error}")
 
         return unwrapped()
+
+    def map_err[F](self, f: Callable[[E], F]) -> "ResultAwaitable[T, F]":
+        """
+        Transform the error value using the provided function asynchronously.
+
+        Args:
+            f: Function to apply to the error value (E -> F)
+
+        Returns:
+            ResultAwaitable[T, F] wrapping the result with transformed error type
+
+        Example:
+            await (
+                Mediator.send_async(cmd)
+                .map_err(lambda e: DatabaseError(f"DB error: {e}"))
+                .unwrap()
+            )
+        """
+
+        async def mapped() -> Result[T, F]:
+            _result: Result[T, E] = await self
+            return _result.map_err(f)
+
+        return ResultAwaitable(mapped())

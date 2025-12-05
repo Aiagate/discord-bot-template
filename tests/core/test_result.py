@@ -482,3 +482,95 @@ def test_safe_decorator_returns_ok() -> None:
     result = safe_function(5)
     assert isinstance(result, Ok)
     assert result.value == 10
+
+
+def test_ok_map_err_passes_through() -> None:
+    """Test that Ok.map_err passes through unchanged without calling function."""
+    result: Ok[int] = Ok(42)
+    call_count = 0
+
+    def transform_error(e: str) -> UseCaseError:
+        nonlocal call_count
+        call_count += 1
+        return UseCaseError(type=ErrorType.UNEXPECTED, message=f"Wrapped: {e}")
+
+    mapped = result.map_err(transform_error)
+
+    assert isinstance(mapped, Ok)
+    assert mapped.value == 42
+    assert call_count == 0  # Function should not be called for Ok
+
+
+def test_err_map_err_transforms_error() -> None:
+    """Test that Err.map_err transforms the error value."""
+    result: Err[str] = Err("original error")
+    mapped = result.map_err(
+        lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=f"Wrapped: {e}")
+    )
+
+    assert isinstance(mapped, Err)
+    assert isinstance(mapped.error, UseCaseError)
+    assert mapped.error.type == ErrorType.VALIDATION_ERROR
+    assert mapped.error.message == "Wrapped: original error"
+
+
+def test_map_err_changes_error_type() -> None:
+    """Test that map_err can change error type from str to UseCaseError."""
+    result: Err[str] = Err("Not found")
+    mapped = result.map_err(lambda e: UseCaseError(type=ErrorType.NOT_FOUND, message=e))
+
+    assert isinstance(mapped, Err)
+    assert isinstance(mapped.error, UseCaseError)
+    assert mapped.error.type == ErrorType.NOT_FOUND
+    assert mapped.error.message == "Not found"
+
+
+def test_map_err_chain() -> None:
+    """Test that multiple map_err calls can be chained."""
+    result: Err[str] = Err("base error")
+    final = (
+        result.map_err(lambda e: f"Level 1: {e}")
+        .map_err(lambda e: f"Level 2: {e}")
+        .map_err(lambda e: f"Level 3: {e}")
+    )
+
+    assert isinstance(final, Err)
+    assert final.error == "Level 3: Level 2: Level 1: base error"
+
+
+def test_map_err_with_map_chain() -> None:
+    """Test that map and map_err can be mixed in a chain."""
+    from app.core.result import Result
+
+    # Test with Ok - map applies, map_err passes through
+    ok_result: Result[int, str] = Ok(5)
+    ok_final = ok_result.map(lambda x: x * 2).map_err(lambda e: f"Error: {e}")
+
+    assert isinstance(ok_final, Ok)
+    assert ok_final.value == 10
+
+    # Test with Err - map passes through, map_err applies
+    err_result: Result[int, str] = Err("failure")
+    err_final = err_result.map(lambda x: x * 2).map_err(lambda e: f"Error: {e}")
+
+    assert isinstance(err_final, Err)
+    assert err_final.error == "Error: failure"
+
+
+def test_map_err_error_wrapping() -> None:
+    """Test map_err for wrapping exceptions (use case from spec)."""
+
+    def find_record(record_id: int) -> Err[KeyError]:
+        """Simulate a function that returns KeyError."""
+        return Err(KeyError(f"ID {record_id}"))
+
+    # Transform KeyError to UseCaseError
+    result = find_record(999).map_err(
+        lambda e: UseCaseError(type=ErrorType.NOT_FOUND, message=f"Record missing: {e}")
+    )
+
+    assert isinstance(result, Err)
+    assert isinstance(result.error, UseCaseError)
+    assert result.error.type == ErrorType.NOT_FOUND
+    assert "Record missing" in result.error.message
+    assert "ID 999" in result.error.message
