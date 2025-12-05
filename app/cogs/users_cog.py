@@ -35,7 +35,7 @@ class UsersCog(BaseCog, name="Users"):
                 lambda value: (
                     f"User Information:\n"
                     f"ID: {value.user.id}\n"
-                    f"Name: {value.user.name}\n"
+                    f"Display Name: {value.user.display_name}\n"
                     f"Email: {value.user.email}"
                 )
             )
@@ -48,18 +48,20 @@ class UsersCog(BaseCog, name="Users"):
     async def users_create(
         self,
         ctx: commands.Context[commands.Bot],
-        name: str,
+        display_name: str,
         email: str,
     ) -> None:
         """Create new user. Usage: !users create <name> <email>"""
         message = await (
-            Mediator.send_async(CreateUserCommand(name=name, email=email))
+            Mediator.send_async(
+                CreateUserCommand(display_name=display_name, email=email)
+            )
             .and_then(lambda result: Mediator.send_async(GetUserQuery(result.user_id)))
             .map(
                 lambda value: (
                     f"User Created:\n"
                     f"ID: {value.user.id}\n"
-                    f"Name: {value.user.name}\n"
+                    f"Display Name: {value.user.display_name}\n"
                     f"Email: {value.user.email}"
                 )
             )

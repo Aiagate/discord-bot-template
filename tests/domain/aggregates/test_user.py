@@ -2,30 +2,25 @@
 
 from datetime import UTC, datetime
 
-import pytest
-
 from app.core.result import is_err
 from app.domain.aggregates.user import User
-from app.domain.value_objects import Email, UserId
+from app.domain.value_objects import DisplayName, Email, UserId
 
 
 def test_create_user_with_empty_name_raises_error() -> None:
-    """Test that creating a User with an empty name raises ValueError."""
-    with pytest.raises(ValueError, match="User name cannot be empty."):
-        User(
-            id=UserId.generate().expect("UserId.generate should succeed"),
-            name="",
-            email=Email.from_primitive("test@example.com").expect(
-                "Email.from_primitive should succeed for valid email"
-            ),
-        )
+    """Test that creating a User with an empty display name returns Err."""
+    result = DisplayName.from_primitive("")
+    assert is_err(result)
+    assert "Display name cannot be empty" in str(result.error)
 
 
 def test_user_change_email() -> None:
     """Test that the change_email method updates the user's email."""
     user = User(
         id=UserId.generate().expect("UserId.generate should succeed"),
-        name="Test User",
+        display_name=DisplayName.from_primitive("Test User").expect(
+            "DisplayName.from_primitive should succeed for valid display name"
+        ),
         email=Email.from_primitive("old@example.com").expect(
             "Email.from_primitive should succeed for valid email"
         ),
@@ -44,9 +39,12 @@ def test_user_creation_with_valid_data() -> None:
     email = Email.from_primitive("alice@example.com").expect(
         "Email.from_primitive should succeed for valid email"
     )
-    user = User(id=user_id, name="Alice", email=email)
+    display_name = DisplayName.from_primitive("Alice").expect(
+        "DisplayName.from_primitive should succeed for valid display name"
+    )
+    user = User(id=user_id, display_name=display_name, email=email)
     assert user.id == user_id
-    assert user.name == "Alice"
+    assert user.display_name == display_name
     assert user.email == email
     assert isinstance(user.created_at, datetime)
     assert isinstance(user.updated_at, datetime)
@@ -57,7 +55,9 @@ def test_user_timestamps_use_utc() -> None:
     before = datetime.now(UTC)
     user = User(
         id=UserId.generate().expect("UserId.generate should succeed"),
-        name="Test",
+        display_name=DisplayName.from_primitive("Test").expect(
+            "DisplayName.from_primitive should succeed for valid display name"
+        ),
         email=Email.from_primitive("test@example.com").expect(
             "Email.from_primitive should succeed for valid email"
         ),
@@ -73,7 +73,9 @@ def test_user_with_explicit_timestamps() -> None:
     specific_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     user = User(
         id=UserId.generate().expect("UserId.generate should succeed"),
-        name="Test",
+        display_name=DisplayName.from_primitive("Test").expect(
+            "DisplayName.from_primitive should succeed for valid display name"
+        ),
         email=Email.from_primitive("test@example.com").expect(
             "Email.from_primitive should succeed for valid email"
         ),

@@ -3,6 +3,7 @@
     "allow": [
       "Write(./**/*)",
       "Read(./**/*)",
+      "Edit(./**/*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(git checkout:*)",

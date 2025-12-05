@@ -18,7 +18,7 @@ async def test_create_user_handler(uow: IUnitOfWork) -> None:
     """Test CreateUserHandler with real database."""
     handler = CreateUserHandler(uow)
 
-    command = CreateUserCommand(name="Alice", email="alice@example.com")
+    command = CreateUserCommand(display_name="Alice", email="alice@example.com")
     result = await handler.handle(command)
 
     assert is_ok(result)
@@ -32,7 +32,7 @@ async def test_create_user_handler_invalid_email(uow: IUnitOfWork) -> None:
     handler = CreateUserHandler(uow)
 
     # Command with an invalid email format
-    command = CreateUserCommand(name="Test User", email="invalid-email")
+    command = CreateUserCommand(display_name="Test User", email="invalid-email")
     result = await handler.handle(command)
 
     assert is_err(result)
@@ -62,7 +62,7 @@ async def test_create_user_handler_repository_error() -> None:
     mock_uow.__aexit__ = AsyncMock(return_value=None)
 
     handler = CreateUserHandler(mock_uow)
-    command = CreateUserCommand(name="Test User", email="test@example.com")
+    command = CreateUserCommand(display_name="Test User", email="test@example.com")
     result = await handler.handle(command)
 
     assert is_err(result)
