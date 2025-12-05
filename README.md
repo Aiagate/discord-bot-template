@@ -103,7 +103,7 @@
 
 ## 必要な環境
 
-- Python 3.12 以上
+- Python 3.13 以上
 - パッケージ管理 [uv](https://github.com/astral-sh/uv)
 - 必要な依存関係は`pyproject.toml`に記載されています。
 
@@ -112,7 +112,7 @@
 1. 仮想環境を作成:
 
    ```bash
-   uv venv -p 3.12 .venv
+   uv venv -p 3.13 .venv
    source .venv/bin/activate  # Windows(PS)の場合は .venv\Scripts\activate
    ```
 
