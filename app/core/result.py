@@ -8,7 +8,7 @@ from typing import Any, Never, TypeVar, overload
 from typing_extensions import TypeIs
 
 T = TypeVar("T")  # Success type
-E = TypeVar("E")  # Error type
+E = TypeVar("E", bound=Exception)  # Error type
 U = TypeVar("U")  # Success type for map/and_then
 
 
@@ -49,7 +49,9 @@ class Ok[T]:
         """
         return Ok(f(self.value))
 
-    def and_then[V, F](self, f: Callable[[T], "Result[V, F]"]) -> "Result[V, F]":
+    def and_then[V, F: Exception](
+        self, f: Callable[[T], "Result[V, F]"]
+    ) -> "Result[V, F]":
         """
         Apply a function that returns a Result, flattening the nested Result.
 
@@ -64,7 +66,7 @@ class Ok[T]:
 
         Example:
             Ok(5).and_then(lambda x: Ok(x * 2))  # Returns Ok(10)
-            Ok(5).and_then(lambda x: Err("failed"))  # Returns Err("failed")
+            Ok(5).and_then(lambda x: Err(Exception("failed")))  # Returns Err(Exception("failed"))
         """
         return f(self.value)
 
@@ -92,7 +94,7 @@ class Ok[T]:
         """
         return self.value
 
-    def map_err[F](self, f: Callable[[Any], F]) -> "Ok[T]":
+    def map_err[F: Exception](self, f: Callable[[Any], F]) -> "Ok[T]":
         """
         Pass through the Ok value unchanged.
 
@@ -123,7 +125,7 @@ class Err[E]:
         """
         return self
 
-    def and_then[V, F](self, f: Callable[[Any], "Result[V, F]"]) -> "Err[E]":
+    def and_then[V, F: Exception](self, f: Callable[[Any], "Result[V, F]"]) -> "Err[E]":
         """
         Pass through the error unchanged (Railway-oriented programming pattern).
 
@@ -136,7 +138,7 @@ class Err[E]:
             Self (unchanged Err)
 
         Example:
-            Err("error").and_then(lambda x: Ok(x * 2))  # Returns Err("error")
+            Err(Exception("error")).and_then(lambda x: Ok(x * 2))  # Returns Err(Exception("error"))
         """
         return self
 
@@ -160,7 +162,7 @@ class Err[E]:
             raise RuntimeError(f"{msg}: {self.error}") from self.error
         raise RuntimeError(f"{msg}: {self.error}")
 
-    def map_err[F](self, f: Callable[[E], F]) -> "Err[F]":
+    def map_err[F: Exception](self, f: Callable[[E], F]) -> "Err[F]":
         """
         Transform the Err value using the provided function.
 
@@ -176,7 +178,7 @@ class Err[E]:
 Result = Ok[T] | Err[E]
 
 
-def is_ok[T, E](result: Result[T, E]) -> TypeIs[Ok[T]]:
+def is_ok[T, E: Exception](result: Result[T, E]) -> TypeIs[Ok[T]]:
     """
     Return true if the result is ok.
 
@@ -186,7 +188,7 @@ def is_ok[T, E](result: Result[T, E]) -> TypeIs[Ok[T]]:
     return isinstance(result, Ok)
 
 
-def is_err[T, E](result: Result[T, E]) -> TypeIs[Err[E]]:
+def is_err[T, E: Exception](result: Result[T, E]) -> TypeIs[Err[E]]:
     """
     Return true if the result is an error.
 
@@ -231,35 +233,35 @@ def safe[T](func: Callable[..., T]) -> Callable[..., Result[T, Exception]]:
 
 
 @overload
-def combine[E](results: tuple[()]) -> Result[tuple[()], E]: ...
+def combine[E: Exception](results: tuple[()]) -> Result[tuple[()], E]: ...
 
 
 @overload
-def combine[T1, E](
+def combine[T1, E: Exception](
     results: tuple[Result[T1, E]],
 ) -> Result[tuple[T1], E]: ...
 
 
 @overload
-def combine[T1, T2, E](
+def combine[T1, T2, E: Exception](
     results: tuple[Result[T1, E], Result[T2, E]],
 ) -> Result[tuple[T1, T2], E]: ...
 
 
 @overload
-def combine[T1, T2, T3, E](
+def combine[T1, T2, T3, E: Exception](
     results: tuple[Result[T1, E], Result[T2, E], Result[T3, E]],
 ) -> Result[tuple[T1, T2, T3], E]: ...
 
 
 @overload
-def combine[T1, T2, T3, T4, E](
+def combine[T1, T2, T3, T4, E: Exception](
     results: tuple[Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E]],
 ) -> Result[tuple[T1, T2, T3, T4], E]: ...
 
 
 @overload
-def combine[T1, T2, T3, T4, T5, E](
+def combine[T1, T2, T3, T4, T5, E: Exception](
     results: tuple[
         Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E], Result[T5, E]
     ],
@@ -267,7 +269,7 @@ def combine[T1, T2, T3, T4, T5, E](
 
 
 @overload
-def combine[T1, T2, T3, T4, T5, T6, E](
+def combine[T1, T2, T3, T4, T5, T6, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -280,7 +282,7 @@ def combine[T1, T2, T3, T4, T5, T6, E](
 
 
 @overload
-def combine[T1, T2, T3, T4, T5, T6, T7, E](
+def combine[T1, T2, T3, T4, T5, T6, T7, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -294,7 +296,7 @@ def combine[T1, T2, T3, T4, T5, T6, T7, E](
 
 
 @overload
-def combine[T1, T2, T3, T4, T5, T6, T7, T8, E](
+def combine[T1, T2, T3, T4, T5, T6, T7, T8, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -309,7 +311,7 @@ def combine[T1, T2, T3, T4, T5, T6, T7, T8, E](
 
 
 @overload
-def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, E](
+def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -325,7 +327,7 @@ def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, E](
 
 
 @overload
-def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E](
+def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -341,7 +343,9 @@ def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E](
 ) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10], E]: ...
 
 
-def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
+def combine[T, E: Exception](
+    results: Sequence[Result[T, E]],
+) -> Result[tuple[T, ...], E]:
     """
     Aggregates a sequence of Result objects.
 
@@ -356,8 +360,8 @@ def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
 
     Examples:
         Heterogeneous types (use tuple):
-        >>> user_id: Result[int, str] = Ok(123)
-        >>> email: Result[str, str] = Ok("user@example.com")
+        >>> user_id: Result[int, Exception] = Ok(123)
+        >>> email: Result[str, Exception] = Ok("user@example.com")
         >>> combine((user_id, email))
         Ok((123, "user@example.com"))
 
@@ -367,9 +371,9 @@ def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
         Ok((1, 2, 3))
 
         Error handling (first error returned):
-        >>> results = [Ok(1), Err("error"), Ok(3)]
+        >>> results = [Ok(1), Err(Exception("error")), Ok(3)]
         >>> combine(results)
-        Err("error")
+        Err(Exception("error"))
     """
     values: list[T] = []
     for r in results:
@@ -380,31 +384,31 @@ def combine[T, E](results: Sequence[Result[T, E]]) -> Result[tuple[T, ...], E]:
 
 
 @overload
-def combine_all[T1, E](
+def combine_all[T1, E: Exception](
     results: tuple[Result[T1, E]],
 ) -> Result[tuple[T1], AggregateErr[E]]: ...
 
 
 @overload
-def combine_all[T1, T2, E](
+def combine_all[T1, T2, E: Exception](
     results: tuple[Result[T1, E], Result[T2, E]],
 ) -> Result[tuple[T1, T2], AggregateErr[E]]: ...
 
 
 @overload
-def combine_all[T1, T2, T3, E](
+def combine_all[T1, T2, T3, E: Exception](
     results: tuple[Result[T1, E], Result[T2, E], Result[T3, E]],
 ) -> Result[tuple[T1, T2, T3], AggregateErr[E]]: ...
 
 
 @overload
-def combine_all[T1, T2, T3, T4, E](
+def combine_all[T1, T2, T3, T4, E: Exception](
     results: tuple[Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E]],
 ) -> Result[tuple[T1, T2, T3, T4], AggregateErr[E]]: ...
 
 
 @overload
-def combine_all[T1, T2, T3, T4, T5, E](
+def combine_all[T1, T2, T3, T4, T5, E: Exception](
     results: tuple[
         Result[T1, E], Result[T2, E], Result[T3, E], Result[T4, E], Result[T5, E]
     ],
@@ -412,7 +416,7 @@ def combine_all[T1, T2, T3, T4, T5, E](
 
 
 @overload
-def combine_all[T1, T2, T3, T4, T5, T6, E](
+def combine_all[T1, T2, T3, T4, T5, T6, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -425,7 +429,7 @@ def combine_all[T1, T2, T3, T4, T5, T6, E](
 
 
 @overload
-def combine_all[T1, T2, T3, T4, T5, T6, T7, E](
+def combine_all[T1, T2, T3, T4, T5, T6, T7, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -439,7 +443,7 @@ def combine_all[T1, T2, T3, T4, T5, T6, T7, E](
 
 
 @overload
-def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, E](
+def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -454,7 +458,7 @@ def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, E](
 
 
 @overload
-def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, E](
+def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -470,7 +474,7 @@ def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, E](
 
 
 @overload
-def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E](
+def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E: Exception](
     results: tuple[
         Result[T1, E],
         Result[T2, E],
@@ -486,7 +490,7 @@ def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E](
 ) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10], AggregateErr[E]]: ...
 
 
-def combine_all[T, E](
+def combine_all[T, E: Exception](
     results: tuple[Result[T, E], ...],
 ) -> Result[tuple[T, ...], AggregateErr[E]]:
     """
@@ -507,9 +511,9 @@ def combine_all[T, E](
 
     Example:
         >>> from app.core.result import combine_all, Ok, Err
-        >>> results = (Ok(1), Err("error1"), Ok(3), Err("error2"))
+        >>> results = (Ok(1), Err(Exception("error1")), Ok(3), Err(Exception("error2")))
         >>> combined = combine_all(results)
-        >>> # Returns Err(AggregateErr(["error1", "error2"]))
+        >>> # Returns Err(AggregateErr([Exception("error1"), Exception("error2")]))
     """
     values: list[T] = []
     errors: list[E] = []
@@ -526,7 +530,7 @@ def combine_all[T, E](
     return Ok(tuple(values))
 
 
-class ResultAwaitable[T, E]:
+class ResultAwaitable[T, E: Exception]:
     """
     Awaitable wrapper for Result that enables method chaining before await.
 
@@ -625,13 +629,11 @@ class ResultAwaitable[T, E]:
                 return _result.unwrap()
             # Since Err.unwrap() is removed, raise the error explicitly
             # TypeIs ensures that if not is_ok, then it must be Err
-            if isinstance(_result.error, Exception):
-                raise _result.error
-            raise RuntimeError(f"unwrap called on Err in async chain: {_result.error}")
+            raise _result.error
 
         return unwrapped()
 
-    def map_err[F](self, f: Callable[[E], F]) -> "ResultAwaitable[T, F]":
+    def map_err[F: Exception](self, f: Callable[[E], F]) -> "ResultAwaitable[T, F]":
         """
         Transform the error value using the provided function asynchronously.
 

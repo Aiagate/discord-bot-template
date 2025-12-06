@@ -17,7 +17,7 @@ class RepositoryErrorType(Enum):
 
 
 @dataclass(frozen=True)
-class RepositoryError:
+class RepositoryError(Exception):
     """Represents a specific error from a repository."""
 
     type: RepositoryErrorType
