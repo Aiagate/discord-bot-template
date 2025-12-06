@@ -4,7 +4,7 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result, combine_all, is_err
+from app.core.result import Ok, Result, combine_all, is_err
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId, TeamName, Version
@@ -14,32 +14,21 @@ from app.usecases.result import ErrorType, UseCaseError
 logger = logging.getLogger(__name__)
 
 
-class CreateTeamResult:
-    """Result object for CreateTeam command."""
-
-    def __init__(self, team_id: str) -> None:
-        self.team_id = team_id
-
-
-class CreateTeamCommand(Request[Result[CreateTeamResult, UseCaseError]]):
+class CreateTeamCommand(Request[Result[str, UseCaseError]]):
     """Command to create new team."""
 
     def __init__(self, name: str) -> None:
         self.name = name
 
 
-class CreateTeamHandler(
-    RequestHandler[CreateTeamCommand, Result[CreateTeamResult, UseCaseError]]
-):
+class CreateTeamHandler(RequestHandler[CreateTeamCommand, Result[str, UseCaseError]]):
     """Handler for CreateTeam command."""
 
     @inject
     def __init__(self, uow: IUnitOfWork) -> None:
         self._uow = uow
 
-    async def handle(
-        self, request: CreateTeamCommand
-    ) -> Result[CreateTeamResult, UseCaseError]:
+    async def handle(self, request: CreateTeamCommand) -> Result[str, UseCaseError]:
         """Create new team and return as DTO within a Result."""
         team_id_result = TeamId.generate()
         team_name_result = TeamName.from_primitive(request.name)
@@ -47,12 +36,11 @@ class CreateTeamHandler(
 
         combined_result = combine_all(
             (team_id_result, team_name_result, version_result)
+        ).map_err(
+            lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
         )
         if is_err(combined_result):
-            error = UseCaseError(
-                type=ErrorType.VALIDATION_ERROR, message=str(combined_result.error)
-            )
-            return Err(error)
+            return combined_result
 
         team_id, team_name, version = combined_result.unwrap()
 
@@ -76,4 +64,4 @@ class CreateTeamHandler(
 
             logger.info("Created team: %s", team)
             team_id = team.id.to_primitive()
-            return Ok(CreateTeamResult(team_id))
+            return Ok(team_id)

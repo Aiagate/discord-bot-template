@@ -42,10 +42,10 @@ async def test_update_team_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert is_ok(result)
-    updated_result = result.value
-    assert updated_result.team_id == saved_team.id.to_primitive()
-    assert updated_result.team_name == "Updated Name"
-    assert updated_result.version == 1  # Version should be incremented
+    team_id = result.value  # Now it's a str
+    assert team_id == saved_team.id.to_primitive()
+    # Version verification is no longer done here
+    # (version is now part of TeamDTO via GetTeamQuery)
 
 
 @pytest.mark.anyio

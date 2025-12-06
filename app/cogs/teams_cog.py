@@ -75,12 +75,15 @@ class TeamsCog(BaseCog, name="Teams"):
         """Update team name. Usage: !teams update <team_id> <new_name>"""
         message = await (
             Mediator.send_async(UpdateTeamCommand(team_id=team_id, new_name=new_name))
+            .and_then(  # type: ignore[arg-type, return-value]
+                lambda team_id: Mediator.send_async(GetTeamQuery(team_id))
+            )
             .map(  # type: ignore[arg-type, return-value]
-                lambda result: (
+                lambda value: (
                     f"Team Updated Successfully:\n"
-                    f"ID: {result.team_id}\n"
-                    f"New Name: {result.team_name}\n"
-                    f"Version: {result.version}"
+                    f"ID: {value.team.id}\n"
+                    f"Name: {value.team.name}\n"
+                    f"Version: {value.team.version}"
                 )
             )
             .unwrap()

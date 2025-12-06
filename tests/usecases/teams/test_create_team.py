@@ -19,8 +19,9 @@ async def test_create_team_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert is_ok(result)
-    assert result.value.team_id  # ULID string should exist
-    assert len(result.value.team_id) == 26  # ULID is 26 characters
+    team_id = result.value  # Now it's a str
+    assert team_id  # ULID string should exist
+    assert len(team_id) == 26  # ULID is 26 characters
 
 
 @pytest.mark.anyio

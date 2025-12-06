@@ -65,5 +65,6 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
             team_dto = TeamDTO(
                 id=team.id.to_primitive(),
                 name=team.name.to_primitive(),
+                version=team.version.to_primitive(),
             )
             return Ok(GetTeamResult(team_dto))
