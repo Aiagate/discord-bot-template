@@ -18,7 +18,7 @@ def test_team_change_name() -> None:
     """Test that the change_name method updates the team's name."""
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Old Team").expect(
+        _name=TeamName.from_primitive("Old Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -47,7 +47,7 @@ def test_team_creation_with_valid_data() -> None:
 
     team = Team(
         id=team_id,
-        name=team_name,
+        _name=team_name,
         version=Version.from_primitive(0).expect(
             "Version.from_primitive should succeed"
         ),
@@ -63,7 +63,7 @@ def test_team_timestamps_use_utc() -> None:
     before = datetime.now(UTC)
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Test Team").expect(
+        _name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -81,7 +81,7 @@ def test_team_with_explicit_timestamps() -> None:
     specific_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Test Team").expect(
+        _name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(

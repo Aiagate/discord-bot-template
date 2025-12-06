@@ -16,7 +16,7 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
     # First, create a team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Alpha Team").expect(
+        _name=TeamName.from_primitive("Alpha Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(

@@ -343,9 +343,9 @@ def combine[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E: Exception](
 ) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10], E]: ...
 
 
-def combine[T, E: Exception](
-    results: Sequence[Result[T, E]],
-) -> Result[tuple[T, ...], E]:
+def combine[E: Exception](
+    results: Sequence[Result[Any, E]],
+) -> Result[tuple[Any, ...], E]:
     """
     Aggregates a sequence of Result objects.
 
@@ -375,7 +375,7 @@ def combine[T, E: Exception](
         >>> combine(results)
         Err(Exception("error"))
     """
-    values: list[T] = []
+    values: list[Any] = []
     for r in results:
         if is_err(r):
             return r  # Return the first error found
@@ -490,9 +490,9 @@ def combine_all[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, E: Exception](
 ) -> Result[tuple[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10], AggregateErr[E]]: ...
 
 
-def combine_all[T, E: Exception](
-    results: tuple[Result[T, E], ...],
-) -> Result[tuple[T, ...], AggregateErr[E]]:
+def combine_all[E: Exception](
+    results: tuple[Result[Any, E], ...],
+) -> Result[tuple[Any, ...], AggregateErr[E]]:
     """
     Aggregates a tuple of Results, collecting all errors.
 
@@ -515,7 +515,7 @@ def combine_all[T, E: Exception](
         >>> combined = combine_all(results)
         >>> # Returns Err(AggregateErr([Exception("error1"), Exception("error2")]))
     """
-    values: list[T] = []
+    values: list[Any] = []
     errors: list[E] = []
 
     for r in results:

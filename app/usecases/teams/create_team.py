@@ -44,7 +44,7 @@ class CreateTeamHandler(RequestHandler[CreateTeamCommand, Result[str, UseCaseErr
 
         team_id, team_name, version = combined_result.unwrap()
 
-        team = Team(id=team_id, name=team_name, version=version)
+        team = Team(id=team_id, _name=team_name, version=version)
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team)

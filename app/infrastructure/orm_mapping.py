@@ -89,6 +89,15 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
 
     for field in fields(entity_type):
         field_name = field.name
+        # --- Custom mapping for TeamORM.name to Team._name ---
+        actual_orm_field_name = field_name
+        if (
+            entity_type.__name__ == "Team"
+            and field_name == "_name"
+            and hasattr(orm_instance, "name")
+        ):
+            actual_orm_field_name = "name"
+        # --- End custom mapping ---
         field_type = type_hints.get(field_name)
 
         if field_type is None:
@@ -98,7 +107,7 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
             )
 
         # Get the value from ORM instance
-        orm_value = getattr(orm_instance, field_name, None)
+        orm_value = getattr(orm_instance, actual_orm_field_name, None)
 
         # Check if the field type is Optional (Union with None)
         origin = get_origin(field_type)
@@ -218,6 +227,15 @@ class ORMMappingRegistry:
 
         # Use automatic conversion
         orm_dict = entity_to_orm_dict(domain_instance)
+
+        # --- Custom mapping for Team._name to TeamORM.name ---
+        if "name" not in orm_dict and "_name" in orm_dict:
+            # Check if the domain_instance is a Team and if the ORM type expects 'name'
+            # This is a bit of a specific hack, but necessary due to dataclass private fields
+            if domain_type.__name__ == "Team" and hasattr(orm_type, "name"):
+                orm_dict["name"] = orm_dict.pop("_name")
+        # --- End custom mapping ---
+
         return orm_type(**orm_dict)
 
     @classmethod

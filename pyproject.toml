@@ -81,6 +81,14 @@ reportUnknownParameterType = false
 reportUnknownMemberType = false
 reportUnknownArgumentType = false
 
+[[tool.pyright.overrides]]
+include = ["tests"]
+reportPrivateUsage = false
+
+[[tool.pyright.overrides]]
+include = ["app/container.py"]
+reportPrivateUsage = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

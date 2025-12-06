@@ -16,7 +16,7 @@ async def test_team_repository_save_and_get(uow: IUnitOfWork) -> None:
     """Test saving and retrieving a team."""
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Alpha Team").expect(
+        _name=TeamName.from_primitive("Alpha Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -65,7 +65,7 @@ async def test_team_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting a team via the repository."""
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("ToDelete Team").expect(
+        _name=TeamName.from_primitive("ToDelete Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -104,7 +104,7 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Timestamp Team").expect(
+        _name=TeamName.from_primitive("Timestamp Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -133,7 +133,7 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
     """Test that updated_at is automatically updated when saving existing team."""
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Update Team").expect(
+        _name=TeamName.from_primitive("Update Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -152,8 +152,10 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
 
     await asyncio.sleep(0.01)
 
-    saved_team.name = TeamName.from_primitive("Updated Team").expect(
-        "TeamName.from_primitive should succeed for valid name"
+    saved_team.change_name(
+        TeamName.from_primitive("Updated Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        )
     )
 
     async with uow:
@@ -176,7 +178,7 @@ async def test_team_repository_concurrent_update_returns_version_conflict(
     # Create initial team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Concurrent Team").expect(
+        _name=TeamName.from_primitive("Concurrent Team").expect(
             "TeamName.from_primitive should succeed"
         ),
         version=Version.from_primitive(0).expect(
@@ -247,7 +249,7 @@ async def test_team_repository_version_increments_on_update(
     """Test that version increments correctly on each update."""
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Version Team").expect(
+        _name=TeamName.from_primitive("Version Team").expect(
             "TeamName.from_primitive should succeed"
         ),
         version=Version.from_primitive(0).expect(
@@ -319,7 +321,7 @@ async def test_team_repository_new_team_has_version_zero(
     """Test that newly created teams start with version 0."""
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("New Team").expect(
+        _name=TeamName.from_primitive("New Team").expect(
             "TeamName.from_primitive should succeed"
         ),
         version=Version.from_primitive(0).expect(

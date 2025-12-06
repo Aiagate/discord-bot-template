@@ -214,7 +214,7 @@ async def test_generic_repository_update_entity_deleted_during_version_check(
     # Create a team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Test Team").expect(
+        _name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed"
         ),
         version=Version.from_primitive(0).expect(

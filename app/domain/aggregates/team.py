@@ -21,14 +21,22 @@ class Team:
     """
 
     id: TeamId
-    name: TeamName
+    _name: TeamName
     version: Version
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    @property
+    def name(self) -> TeamName:
+        return self._name
+
+    @name.setter
+    def name(self, new_name: TeamName) -> None:
+        raise AttributeError("Use 'change_name' to modify the team name.")
+
     def __post_init__(self) -> None:
         """Validate team data."""
-        if not self.name:
+        if not self._name:
             raise ValueError("Team name cannot be empty.")
 
     def change_name(self, new_name: TeamName) -> Team:
@@ -36,6 +44,8 @@ class Team:
 
         Note: updated_at is automatically managed by the repository layer.
         """
-        self.name = new_name
+        self._name = new_name
+
+        return self
 
         return self

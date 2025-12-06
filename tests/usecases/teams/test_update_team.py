@@ -18,7 +18,7 @@ async def test_update_team_handler(uow: IUnitOfWork) -> None:
     # First, create a team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Original Name").expect(
+        _name=TeamName.from_primitive("Original Name").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -69,7 +69,7 @@ async def test_update_team_handler_validation_error(uow: IUnitOfWork) -> None:
     # First, create a team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Test Team").expect(
+        _name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -100,7 +100,7 @@ async def test_update_team_handler_name_too_long(uow: IUnitOfWork) -> None:
     # First, create a team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Test Team").expect(
+        _name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -133,7 +133,7 @@ async def test_update_team_handler_concurrency_conflict(uow: IUnitOfWork) -> Non
     # Create a team
     team = Team(
         id=TeamId.generate().expect("TeamId.generate should succeed"),
-        name=TeamName.from_primitive("Original Name").expect(
+        _name=TeamName.from_primitive("Original Name").expect(
             "TeamName.from_primitive should succeed for valid name"
         ),
         version=Version.from_primitive(0).expect(
@@ -170,7 +170,7 @@ async def test_update_team_handler_concurrency_conflict(uow: IUnitOfWork) -> Non
     # Now create a "stale" team by using the old version
     stale_team = Team(
         id=saved_team.id,
-        name=saved_team.name,  # Old name
+        _name=saved_team.name,  # Old name
         version=Version.from_primitive(0).expect(
             "Version.from_primitive should succeed"
         ),  # Old version
@@ -259,7 +259,7 @@ async def test_update_team_handler_version_conflict_through_handler() -> None:
         "TeamName.from_primitive should succeed"
     )
     version = Version.from_primitive(0).expect("Version.from_primitive should succeed")
-    mock_team = Team(id=team_id, name=team_name, version=version)
+    mock_team = Team(id=team_id, _name=team_name, version=version)
 
     # Mock get_by_id to return the team
     mock_repo.get_by_id = AsyncMock(return_value=Ok(mock_team))
@@ -299,7 +299,7 @@ async def test_update_team_handler_add_unexpected_error() -> None:
         "TeamName.from_primitive should succeed"
     )
     version = Version.from_primitive(0).expect("Version.from_primitive should succeed")
-    mock_team = Team(id=team_id, name=team_name, version=version)
+    mock_team = Team(id=team_id, _name=team_name, version=version)
 
     # Mock get_by_id to return the team
     mock_repo.get_by_id = AsyncMock(return_value=Ok(mock_team))
@@ -339,7 +339,7 @@ async def test_update_team_handler_commit_failure() -> None:
         "TeamName.from_primitive should succeed"
     )
     version = Version.from_primitive(0).expect("Version.from_primitive should succeed")
-    mock_team = Team(id=team_id, name=team_name, version=version)
+    mock_team = Team(id=team_id, _name=team_name, version=version)
 
     # Mock get_by_id to return the team
     mock_repo.get_by_id = AsyncMock(return_value=Ok(mock_team))
@@ -347,7 +347,7 @@ async def test_update_team_handler_commit_failure() -> None:
     # Mock add to succeed
     updated_team = Team(
         id=team_id,
-        name=TeamName.from_primitive("Updated Name").expect(
+        _name=TeamName.from_primitive("Updated Name").expect(
             "TeamName.from_primitive should succeed"
         ),
         version=Version.from_primitive(1).expect(
