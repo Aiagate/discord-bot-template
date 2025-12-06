@@ -8,6 +8,7 @@ from app.cogs.base_cog import BaseCog
 from app.mediator import Mediator
 from app.usecases.teams.create_team import CreateTeamCommand
 from app.usecases.teams.get_team import GetTeamQuery
+from app.usecases.teams.update_team import UpdateTeamCommand
 
 
 class TeamsCog(BaseCog, name="Teams"):
@@ -56,6 +57,30 @@ class TeamsCog(BaseCog, name="Teams"):
             .map(  # type: ignore[arg-type, return-value]
                 lambda value: (
                     f"Team Created:\nID: {value.team.id}\nName: {value.team.name}"
+                )
+            )
+            .unwrap()
+        )
+
+        await ctx.send(content=message)
+
+    @teams.command(name="update")
+    async def teams_update(
+        self,
+        ctx: commands.Context[commands.Bot],
+        team_id: str,
+        *,
+        new_name: str,
+    ) -> None:
+        """Update team name. Usage: !teams update <team_id> <new_name>"""
+        message = await (
+            Mediator.send_async(UpdateTeamCommand(team_id=team_id, new_name=new_name))
+            .map(  # type: ignore[arg-type, return-value]
+                lambda result: (
+                    f"Team Updated Successfully:\n"
+                    f"ID: {result.team_id}\n"
+                    f"New Name: {result.team_name}\n"
+                    f"Version: {result.version}"
                 )
             )
             .unwrap()

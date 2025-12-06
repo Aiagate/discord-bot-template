@@ -10,6 +10,7 @@ class ErrorType(Enum):
     NOT_FOUND = auto()
     VALIDATION_ERROR = auto()
     UNEXPECTED = auto()
+    CONCURRENCY_CONFLICT = auto()
 
 
 @dataclass(frozen=True)

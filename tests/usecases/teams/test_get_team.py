@@ -5,7 +5,7 @@ import pytest
 from app.core.result import is_err, is_ok
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import TeamId, TeamName
+from app.domain.value_objects import TeamId, TeamName, Version
 from app.usecases.result import ErrorType
 from app.usecases.teams.get_team import GetTeamHandler, GetTeamQuery
 
@@ -18,6 +18,9 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
         id=TeamId.generate().expect("TeamId.generate should succeed"),
         name=TeamName.from_primitive("Alpha Team").expect(
             "TeamName.from_primitive should succeed for valid name"
+        ),
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
         ),
     )
 

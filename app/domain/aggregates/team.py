@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from app.domain.value_objects import TeamId, TeamName
+from app.domain.value_objects import TeamId, TeamName, Version
 
 
 @dataclass
@@ -15,10 +15,14 @@ class Team:
     Implements IAuditable: timestamps are infrastructure concerns but exposed
     as read-only fields for auditing and display purposes. The repository layer
     automatically manages created_at and updated_at.
+
+    Implements IVersionable: optimistic locking via version field, which is
+    automatically managed by the repository layer during updates.
     """
 
     id: TeamId
     name: TeamName
+    version: Version
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 

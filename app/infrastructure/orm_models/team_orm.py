@@ -17,6 +17,7 @@ class TeamORM(SQLModel, table=True):
 
     id: str | None = Field(default=None, primary_key=True, max_length=26)
     name: str = Field(max_length=100, index=True)
+    version: int = Field(default=0)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )

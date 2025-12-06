@@ -6,5 +6,6 @@ from app.domain.value_objects.email import Email
 from app.domain.value_objects.team_id import TeamId
 from app.domain.value_objects.team_name import TeamName
 from app.domain.value_objects.user_id import UserId
+from app.domain.value_objects.version import Version
 
-__all__ = ["BaseId", "DisplayName", "Email", "TeamId", "TeamName", "UserId"]
+__all__ = ["BaseId", "DisplayName", "Email", "TeamId", "TeamName", "UserId", "Version"]

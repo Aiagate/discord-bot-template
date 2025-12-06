@@ -7,6 +7,11 @@ from app.usecases.teams.create_team import (
 )
 from app.usecases.teams.get_team import GetTeamHandler, GetTeamQuery, GetTeamResult
 from app.usecases.teams.team_dto import TeamDTO
+from app.usecases.teams.update_team import (
+    UpdateTeamCommand,
+    UpdateTeamHandler,
+    UpdateTeamResult,
+)
 
 __all__ = [
     "CreateTeamCommand",
@@ -16,4 +21,7 @@ __all__ = [
     "GetTeamQuery",
     "GetTeamResult",
     "TeamDTO",
+    "UpdateTeamCommand",
+    "UpdateTeamHandler",
+    "UpdateTeamResult",
 ]
