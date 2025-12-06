@@ -4,10 +4,10 @@ import logging
 
 from injector import inject
 
-from app.core.result import Ok, Result, is_err
+from app.core.result import Err, Ok, Result, combine_all, is_err
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import TeamId, TeamName
+from app.domain.value_objects import TeamId, TeamName, Version
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
 
@@ -41,25 +41,22 @@ class CreateTeamHandler(
         self, request: CreateTeamCommand
     ) -> Result[CreateTeamResult, UseCaseError]:
         """Create new team and return as DTO within a Result."""
-        team_id_result = TeamId.generate().map_err(
-            lambda _: UseCaseError(
-                type=ErrorType.UNEXPECTED, message="Failed to generate Team ID."
+        team_id_result = TeamId.generate()
+        team_name_result = TeamName.from_primitive(request.name)
+        version_result = Version.from_primitive(0)
+
+        combined_result = combine_all(
+            (team_id_result, team_name_result, version_result)
+        )
+        if is_err(combined_result):
+            error = UseCaseError(
+                type=ErrorType.VALIDATION_ERROR, message=str(combined_result.error)
             )
-        )
-        team_name_result = TeamName.from_primitive(request.name).map_err(
-            lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
-        )
+            return Err(error)
 
-        if is_err(team_id_result):
-            return team_id_result
+        team_id, team_name, version = combined_result.unwrap()
 
-        if is_err(team_name_result):
-            return team_name_result
-
-        team_id = team_id_result.unwrap()
-        team_name = team_name_result.unwrap()
-
-        team = Team(id=team_id, name=team_name)
+        team = Team(id=team_id, name=team_name, version=version)
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team)

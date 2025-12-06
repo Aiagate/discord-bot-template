@@ -3,15 +3,9 @@
 from collections.abc import Awaitable, Callable, Coroutine, Generator, Sequence
 from dataclasses import dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Never, TypeVar, overload
+from typing import Any, Never, TypeVar, overload
 
-if TYPE_CHECKING:
-    from typing_extensions import TypeIs
-else:
-    try:
-        from typing import TypeIs
-    except ImportError:
-        from typing_extensions import TypeIs
+from typing_extensions import TypeIs
 
 T = TypeVar("T")  # Success type
 E = TypeVar("E")  # Error type

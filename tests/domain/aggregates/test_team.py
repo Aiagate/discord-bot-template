@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from app.core.result import is_err, is_ok
 from app.domain.aggregates.team import Team
-from app.domain.value_objects import TeamId, TeamName
+from app.domain.value_objects import TeamId, TeamName, Version
 
 
 def test_create_team_with_empty_name_returns_err() -> None:
@@ -20,6 +20,9 @@ def test_team_change_name() -> None:
         id=TeamId.generate().expect("TeamId.generate should succeed"),
         name=TeamName.from_primitive("Old Team").expect(
             "TeamName.from_primitive should succeed for valid name"
+        ),
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
         ),
     )
     team.change_name(
@@ -42,7 +45,13 @@ def test_team_creation_with_valid_data() -> None:
         "TeamName.from_primitive should succeed for valid name"
     )
 
-    team = Team(id=team_id, name=team_name)
+    team = Team(
+        id=team_id,
+        name=team_name,
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
+        ),
+    )
     assert team.id == team_id
     assert team.name == team_name
     assert isinstance(team.created_at, datetime)
@@ -56,6 +65,9 @@ def test_team_timestamps_use_utc() -> None:
         id=TeamId.generate().expect("TeamId.generate should succeed"),
         name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed for valid name"
+        ),
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
         ),
     )
     after = datetime.now(UTC)
@@ -71,6 +83,9 @@ def test_team_with_explicit_timestamps() -> None:
         id=TeamId.generate().expect("TeamId.generate should succeed"),
         name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed for valid name"
+        ),
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
         ),
         created_at=specific_time,
         updated_at=specific_time,

@@ -13,6 +13,7 @@ class RepositoryErrorType(Enum):
 
     NOT_FOUND = auto()
     UNEXPECTED = auto()
+    VERSION_CONFLICT = auto()
 
 
 @dataclass(frozen=True)
