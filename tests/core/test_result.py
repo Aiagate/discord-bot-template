@@ -97,9 +97,9 @@ def test_map_expect_chain_with_err() -> None:
     assert "Should not be an error" in str(exc_info.value)
 
 
-def test_err_expect_with_non_exception() -> None:
-    """Test that Err.expect raises RuntimeError for non-Exception errors."""
-    result: Err[str] = Err("Not an exception")
+def test_err_expect_with_exception() -> None:
+    """Test that Err.expect raises RuntimeError for Exception errors."""
+    result: Err[Exception] = Err(Exception("Not an exception"))
 
     with pytest.raises(RuntimeError) as exc_info:
         result.expect("Expected success")
@@ -489,7 +489,7 @@ def test_ok_map_err_passes_through() -> None:
     result: Ok[int] = Ok(42)
     call_count = 0
 
-    def transform_error(e: str) -> UseCaseError:
+    def transform_error(e: Exception) -> UseCaseError:
         nonlocal call_count
         call_count += 1
         return UseCaseError(type=ErrorType.UNEXPECTED, message=f"Wrapped: {e}")
@@ -503,7 +503,7 @@ def test_ok_map_err_passes_through() -> None:
 
 def test_err_map_err_transforms_error() -> None:
     """Test that Err.map_err transforms the error value."""
-    result: Err[str] = Err("original error")
+    result: Err[Exception] = Err(Exception("original error"))
     mapped = result.map_err(
         lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=f"Wrapped: {e}")
     )
@@ -516,8 +516,10 @@ def test_err_map_err_transforms_error() -> None:
 
 def test_map_err_changes_error_type() -> None:
     """Test that map_err can change error type from str to UseCaseError."""
-    result: Err[str] = Err("Not found")
-    mapped = result.map_err(lambda e: UseCaseError(type=ErrorType.NOT_FOUND, message=e))
+    result: Err[Exception] = Err(Exception("Not found"))
+    mapped = result.map_err(
+        lambda e: UseCaseError(type=ErrorType.NOT_FOUND, message=str(e))
+    )
 
     assert isinstance(mapped, Err)
     assert isinstance(mapped.error, UseCaseError)
@@ -527,15 +529,15 @@ def test_map_err_changes_error_type() -> None:
 
 def test_map_err_chain() -> None:
     """Test that multiple map_err calls can be chained."""
-    result: Err[str] = Err("base error")
+    result: Err[Exception] = Err(Exception("base error"))
     final = (
-        result.map_err(lambda e: f"Level 1: {e}")
-        .map_err(lambda e: f"Level 2: {e}")
-        .map_err(lambda e: f"Level 3: {e}")
+        result.map_err(lambda e: Exception(f"Level 1: {e}"))
+        .map_err(lambda e: Exception(f"Level 2: {e}"))
+        .map_err(lambda e: Exception(f"Level 3: {e}"))
     )
 
     assert isinstance(final, Err)
-    assert final.error == "Level 3: Level 2: Level 1: base error"
+    assert str(final.error) == "Level 3: Level 2: Level 1: base error"
 
 
 def test_map_err_with_map_chain() -> None:
@@ -543,18 +545,22 @@ def test_map_err_with_map_chain() -> None:
     from app.core.result import Result
 
     # Test with Ok - map applies, map_err passes through
-    ok_result: Result[int, str] = Ok(5)
-    ok_final = ok_result.map(lambda x: x * 2).map_err(lambda e: f"Error: {e}")
+    ok_result: Result[int, Exception] = Ok(5)
+    ok_final = ok_result.map(lambda x: x * 2).map_err(
+        lambda e: Exception(f"Error: {e}")
+    )
 
     assert isinstance(ok_final, Ok)
     assert ok_final.value == 10
 
     # Test with Err - map passes through, map_err applies
-    err_result: Result[int, str] = Err("failure")
-    err_final = err_result.map(lambda x: x * 2).map_err(lambda e: f"Error: {e}")
+    err_result: Result[int, Exception] = Err(Exception("failure"))
+    err_final = err_result.map(lambda x: x * 2).map_err(
+        lambda e: Exception(f"Error: {e}")
+    )
 
     assert isinstance(err_final, Err)
-    assert err_final.error == "Error: failure"
+    assert str(err_final.error) == "Error: failure"
 
 
 def test_map_err_error_wrapping() -> None:

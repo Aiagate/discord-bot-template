@@ -9,3 +9,4 @@ class TeamDTO:
 
     id: str
     name: str
+    version: int

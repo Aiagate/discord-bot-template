@@ -11,7 +11,9 @@
       "Bash(uv sync:*)",
       "Bash(uv add:*)",
       "Bash(uv remove:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

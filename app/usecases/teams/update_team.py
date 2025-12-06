@@ -4,9 +4,9 @@ import logging
 
 from injector import inject
 
-from app.core.result import Err, Ok, Result, combine_all, is_err
+from app.core.result import Ok, Result, combine_all, is_err
 from app.domain.aggregates.team import Team
-from app.domain.repositories import IUnitOfWork, RepositoryErrorType
+from app.domain.repositories import IUnitOfWork, RepositoryError, RepositoryErrorType
 from app.domain.value_objects import TeamId, TeamName
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
@@ -14,16 +14,30 @@ from app.usecases.result import ErrorType, UseCaseError
 logger = logging.getLogger(__name__)
 
 
-class UpdateTeamResult:
-    """Result object for UpdateTeam command."""
+def _map_get_error(repo_error: RepositoryError, team_id: str) -> UseCaseError:
+    """Map repository get errors to use case errors."""
+    if repo_error.type == RepositoryErrorType.NOT_FOUND:
+        return UseCaseError(
+            type=ErrorType.NOT_FOUND,
+            message=f"Team with id {team_id} not found",
+        )
+    return UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
 
-    def __init__(self, team_id: str, team_name: str, version: int) -> None:
-        self.team_id = team_id
-        self.team_name = team_name
-        self.version = version
+
+def _map_update_error(repo_error: RepositoryError, team_id: str) -> UseCaseError:
+    """Map repository update errors to use case errors."""
+    if repo_error.type == RepositoryErrorType.VERSION_CONFLICT:
+        return UseCaseError(
+            type=ErrorType.CONCURRENCY_CONFLICT,
+            message=(
+                f"Team with id {team_id} was modified by another user. "
+                "Please reload and try again."
+            ),
+        )
+    return UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
 
 
-class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseError]]):
+class UpdateTeamCommand(Request[Result[str, UseCaseError]]):
     """Command to update team name."""
 
     def __init__(self, team_id: str, new_name: str) -> None:
@@ -31,29 +45,24 @@ class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseError]]):
         self.new_name = new_name
 
 
-class UpdateTeamHandler(
-    RequestHandler[UpdateTeamCommand, Result[UpdateTeamResult, UseCaseError]]
-):
+class UpdateTeamHandler(RequestHandler[UpdateTeamCommand, Result[str, UseCaseError]]):
     """Handler for UpdateTeam command."""
 
     @inject
     def __init__(self, uow: IUnitOfWork) -> None:
         self._uow = uow
 
-    async def handle(
-        self, request: UpdateTeamCommand
-    ) -> Result[UpdateTeamResult, UseCaseError]:
+    async def handle(self, request: UpdateTeamCommand) -> Result[str, UseCaseError]:
         """Update team name and return updated team info within a Result."""
         # Validate inputs
         team_id_result = TeamId.from_primitive(request.team_id)
         team_name_result = TeamName.from_primitive(request.new_name)
 
-        combined_result = combine_all((team_id_result, team_name_result))
+        combined_result = combine_all((team_id_result, team_name_result)).map_err(
+            lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
+        )
         if is_err(combined_result):
-            error = UseCaseError(
-                type=ErrorType.VALIDATION_ERROR, message=str(combined_result.error)
-            )
-            return Err(error)
+            return combined_result
 
         team_id, new_team_name = combined_result.unwrap()
 
@@ -61,20 +70,11 @@ class UpdateTeamHandler(
             team_repo = self._uow.GetRepository(Team, TeamId)
 
             # Get existing team
-            get_result = await team_repo.get_by_id(team_id)
+            get_result = (await team_repo.get_by_id(team_id)).map_err(
+                lambda e: _map_get_error(e, request.team_id)
+            )
             if is_err(get_result):
-                repo_error = get_result.error
-                if repo_error.type == RepositoryErrorType.NOT_FOUND:
-                    error = UseCaseError(
-                        type=ErrorType.NOT_FOUND,
-                        message=f"Team with id {request.team_id} not found",
-                    )
-                    return Err(error)
-                else:
-                    error = UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=repo_error.message
-                    )
-                    return Err(error)
+                return get_result
 
             team = get_result.unwrap()
 
@@ -82,23 +82,11 @@ class UpdateTeamHandler(
             team.change_name(new_team_name)
 
             # Save updated team (optimistic locking happens here)
-            update_result = await team_repo.add(team)
+            update_result = (await team_repo.add(team)).map_err(
+                lambda e: _map_update_error(e, request.team_id)
+            )
             if is_err(update_result):
-                repo_error = update_result.error
-                if repo_error.type == RepositoryErrorType.VERSION_CONFLICT:
-                    error = UseCaseError(
-                        type=ErrorType.CONCURRENCY_CONFLICT,
-                        message=(
-                            f"Team with id {request.team_id} was modified by another user. "
-                            "Please reload and try again."
-                        ),
-                    )
-                    return Err(error)
-                else:
-                    error = UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=repo_error.message
-                    )
-                    return Err(error)
+                return update_result
 
             # Commit transaction
             commit_result = (await self._uow.commit()).map_err(
@@ -111,10 +99,4 @@ class UpdateTeamHandler(
             updated_team = update_result.unwrap()
             logger.info("Updated team: %s", updated_team)
 
-            return Ok(
-                UpdateTeamResult(
-                    team_id=updated_team.id.to_primitive(),
-                    team_name=updated_team.name.to_primitive(),
-                    version=updated_team.version.to_primitive(),
-                )
-            )
+            return Ok(updated_team.id.to_primitive())
