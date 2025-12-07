@@ -16,9 +16,7 @@ class DatabaseModule(injector.Module):
         """Provide session factory for creating database sessions."""
         from app.infrastructure import database
 
-        if database._session_factory is None:
-            raise RuntimeError("Database not initialized. Call init_db() first.")
-        return database._session_factory
+        return database.get_session_factory()
 
     @injector.provider
     def provide_unit_of_work(

@@ -5,11 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from app.domain.shared import DomainEntityBase
 from app.domain.value_objects import TeamId, TeamName, Version
 
 
-@dataclass
-class Team:
+@dataclass(frozen=True)
+class Team(DomainEntityBase):
     """Team aggregate root.
 
     Implements IAuditable: timestamps are infrastructure concerns but exposed
@@ -36,6 +37,6 @@ class Team:
 
         Note: updated_at is automatically managed by the repository layer.
         """
-        self.name = new_name
+        self._update_state("name", new_name)
 
         return self

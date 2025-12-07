@@ -1,6 +1,9 @@
 """Tests for Team aggregate."""
 
+from dataclasses import FrozenInstanceError, is_dataclass
 from datetime import UTC, datetime
+
+import pytest
 
 from app.core.result import is_err, is_ok
 from app.domain.aggregates.team import Team
@@ -106,3 +109,38 @@ def test_team_creation_with_invalid_name_returns_err() -> None:
     result_whitespace = TeamName.from_primitive("  Team Name  ")
     assert is_err(result_whitespace)
     assert "cannot have leading or trailing whitespace" in str(result_whitespace.error)
+
+
+def test_team_direct_assignment_raises_frozen_error() -> None:
+    """Test that direct field assignment raises FrozenInstanceError."""
+    team = Team(
+        id=TeamId.generate().expect("TeamId.generate should succeed"),
+        name=TeamName.from_primitive("Test Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        ),
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
+        ),
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        team.name = TeamName.from_primitive("Hacked Team").expect(  # type: ignore[misc]
+            "TeamName.from_primitive should succeed"
+        )
+
+
+def test_team_is_frozen_dataclass() -> None:
+    """Test that Team is a frozen dataclass and hashable."""
+    assert is_dataclass(Team)
+    team = Team(
+        id=TeamId.generate().expect("TeamId.generate should succeed"),
+        name=TeamName.from_primitive("Test Team").expect(
+            "TeamName.from_primitive should succeed"
+        ),
+        version=Version.from_primitive(0).expect(
+            "Version.from_primitive should succeed"
+        ),
+    )
+    # Frozen dataclasses can be used as dict keys
+    team_dict = {team: "value"}
+    assert team_dict[team] == "value"

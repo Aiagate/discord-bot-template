@@ -152,8 +152,10 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
 
     await asyncio.sleep(0.01)
 
-    saved_team.name = TeamName.from_primitive("Updated Team").expect(
-        "TeamName.from_primitive should succeed for valid name"
+    saved_team.change_name(
+        TeamName.from_primitive("Updated Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        )
     )
 
     async with uow:

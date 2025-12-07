@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from app.domain.shared import DomainEntityBase
 from app.domain.value_objects import DisplayName, Email, UserId
 
 
-@dataclass
-class User:
+@dataclass(frozen=True)
+class User(DomainEntityBase):
     """User aggregate root.
 
     Implements IAuditable: timestamps are infrastructure concerns but exposed
@@ -26,6 +27,6 @@ class User:
 
         Note: updated_at is automatically managed by the repository layer.
         """
-        self.email = new_email
+        self._update_state("email", new_email)
 
         return self

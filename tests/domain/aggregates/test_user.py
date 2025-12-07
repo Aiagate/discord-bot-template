@@ -1,6 +1,9 @@
 """Tests for domain models."""
 
+from dataclasses import FrozenInstanceError, is_dataclass
 from datetime import UTC, datetime
+
+import pytest
 
 from app.core.result import is_err
 from app.domain.aggregates.user import User
@@ -92,3 +95,38 @@ def test_creation_with_invalid_email_returns_err() -> None:
     result = Email.from_primitive("invalid-email")
     assert is_err(result)
     assert "Invalid email format" in str(result.error)
+
+
+def test_user_direct_assignment_raises_frozen_error() -> None:
+    """Test that direct field assignment raises FrozenInstanceError."""
+    user = User(
+        id=UserId.generate().expect("UserId.generate should succeed"),
+        display_name=DisplayName.from_primitive("Test User").expect(
+            "DisplayName.from_primitive should succeed for valid display name"
+        ),
+        email=Email.from_primitive("test@example.com").expect(
+            "Email.from_primitive should succeed for valid email"
+        ),
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        user.email = Email.from_primitive("hacked@example.com").expect(  # type: ignore[misc]
+            "Email.from_primitive should succeed"
+        )
+
+
+def test_user_is_frozen_dataclass() -> None:
+    """Test that User is a frozen dataclass and hashable."""
+    assert is_dataclass(User)
+    user = User(
+        id=UserId.generate().expect("UserId.generate should succeed"),
+        display_name=DisplayName.from_primitive("Test").expect(
+            "DisplayName.from_primitive should succeed"
+        ),
+        email=Email.from_primitive("test@example.com").expect(
+            "Email.from_primitive should succeed"
+        ),
+    )
+    # Frozen dataclasses can be used as dict keys
+    user_dict = {user: "value"}
+    assert user_dict[user] == "value"

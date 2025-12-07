@@ -39,19 +39,21 @@ async def test_uow_rollback(uow: IUnitOfWork) -> None:
             get_result = await repo.get_by_id(initial_user.id)
             assert is_ok(get_result)
             user_to_update = get_result.value
-            user_to_update.display_name = DisplayName.from_primitive(
-                "Updated Name"
-            ).expect("DisplayName.from_primitive should succeed")
+            user_to_update.change_email(
+                Email.from_primitive("updated@example.com").expect(
+                    "Email.from_primitive should succeed"
+                )
+            )
             await repo.add(user_to_update)
             raise ValueError("Simulating a failure")
     except ValueError:
         # Expected failure
         pass
 
-    # 3. Verify that the name was NOT updated
+    # 3. Verify that the email was NOT updated
     async with uow:
         repo = uow.GetRepository(User, UserId)
         retrieved_result = await repo.get_by_id(initial_user.id)
         assert is_ok(retrieved_result)
         retrieved_user = retrieved_result.value
-        assert retrieved_user.display_name.to_primitive() == "Rollback Test"
+        assert retrieved_user.email.to_primitive() == "rollback@example.com"

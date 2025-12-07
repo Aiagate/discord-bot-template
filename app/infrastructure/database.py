@@ -34,6 +34,23 @@ def get_engine() -> AsyncEngine:
     return _engine
 
 
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Get the global session factory."""
+    if _session_factory is None:
+        raise RuntimeError("Database not initialized. Call init_db() first.")
+    return _session_factory
+
+
+def set_engine_and_factory(
+    engine: AsyncEngine | None,
+    session_factory: async_sessionmaker[AsyncSession] | None,
+) -> None:
+    """Set engine and session factory (for testing)."""
+    global _engine, _session_factory
+    _engine = engine
+    _session_factory = session_factory
+
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session for dependency injection."""
     if _session_factory is None:

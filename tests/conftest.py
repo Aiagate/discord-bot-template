@@ -26,20 +26,26 @@ async def test_db_engine() -> AsyncGenerator[None, None]:
 
     from app.infrastructure import database
 
-    old_engine = database._engine
-    old_session_factory = database._session_factory
+    # Save old state (may be None if not initialized)
+    try:
+        old_engine = database.get_engine()
+    except RuntimeError:
+        old_engine = None
+    try:
+        old_session_factory = database.get_session_factory()
+    except RuntimeError:
+        old_session_factory = None
 
-    database._engine = engine
-    database._session_factory = async_sessionmaker(
+    new_session_factory = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
+    database.set_engine_and_factory(engine, new_session_factory)
 
     yield
 
-    database._engine = old_engine
-    database._session_factory = old_session_factory
+    database.set_engine_and_factory(old_engine, old_session_factory)
     await engine.dispose()
 
 
@@ -50,9 +56,7 @@ async def session_factory(
     """Provide session factory for tests."""
     from app.infrastructure import database
 
-    if database._session_factory is None:
-        raise RuntimeError("Database not initialized")
-    return database._session_factory
+    return database.get_session_factory()
 
 
 @pytest.fixture(scope="function")

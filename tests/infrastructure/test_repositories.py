@@ -118,8 +118,10 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
 
     await asyncio.sleep(0.01)
 
-    saved_user.email = Email.from_primitive("updated@example.com").expect(
-        "Email.from_primitive should succeed for valid email"
+    saved_user.change_email(
+        Email.from_primitive("updated@example.com").expect(
+            "Email.from_primitive should succeed for valid email"
+        )
     )
 
     async with uow:

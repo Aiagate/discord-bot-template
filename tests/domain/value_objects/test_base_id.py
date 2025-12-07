@@ -20,7 +20,9 @@ def test_generate_creates_new_id() -> None:
     assert is_ok(result)
     test_id = result.expect("TestId.generate should succeed")
     assert test_id is not None
-    assert isinstance(test_id._value, ULID)
+    # ULID is represented as a 26-character string
+    primitive = test_id.to_primitive()
+    assert len(primitive) == 26
 
 
 def test_to_primitive_returns_string() -> None:

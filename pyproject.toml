@@ -75,7 +75,7 @@ exclude = [
     ".venv",
 ]
 reportMissingTypeStubs = false
-reportPrivateUsage = false
+reportPrivateUsage = "error"
 reportUnknownVariableType = false
 reportUnknownParameterType = false
 reportUnknownMemberType = false
