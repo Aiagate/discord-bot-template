@@ -15,10 +15,8 @@ from app.domain.repositories import IUnitOfWork, RepositoryErrorType
 from app.domain.value_objects import (
     DisplayName,
     Email,
-    TeamId,
     TeamName,
     UserId,
-    Version,
 )
 from app.infrastructure.orm_mapping import ORMMappingRegistry
 from app.infrastructure.repositories.generic_repository import GenericRepository
@@ -212,13 +210,9 @@ async def test_generic_repository_update_entity_deleted_during_version_check(
     This covers lines 150-154 in generic_repository.py
     """
     # Create a team
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("Test Team").expect(
             "TeamName.from_primitive should succeed"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -240,26 +234,26 @@ async def test_generic_repository_update_entity_deleted_during_version_check(
         repo = uow.GetRepository(Team)
 
         # Create mock objects for execute results
-        # First execute: is_update check - returns entity exists
-        is_update_check_mock = MagicMock()
-        is_update_check_mock.scalar_one_or_none.return_value = (
+        # First execute: entity existence check - returns entity exists
+        existence_check_mock = MagicMock()
+        existence_check_mock.scalar_one_or_none.return_value = (
             MagicMock()
         )  # Entity exists
 
-        # Second execute: UPDATE statement returns rowcount=0
+        # Second execute: UPDATE statement returns rowcount=0 (version mismatch)
         update_result_mock = MagicMock()
         update_result_mock.rowcount = 0
 
-        # Third execute: NOT_FOUND CHECK statement returns None (entity deleted)
-        not_found_check_mock = MagicMock()
-        not_found_check_mock.scalar_one_or_none.return_value = None  # Entity deleted
+        # Third execute: Re-fetch for version conflict - returns None (entity deleted)
+        refetch_mock = MagicMock()
+        refetch_mock.scalar_one_or_none.return_value = None  # Entity was deleted
 
         # Mock session.execute to return different results for each call
         execute_mock = AsyncMock()
         execute_mock.side_effect = [
-            is_update_check_mock,
+            existence_check_mock,
             update_result_mock,
-            not_found_check_mock,
+            refetch_mock,
         ]
 
         with patch.object(
@@ -267,10 +261,10 @@ async def test_generic_repository_update_entity_deleted_during_version_check(
             "execute",
             execute_mock,  # type: ignore[attr-defined]
         ):
-            result = await repo.add(updated_team)
+            result = await repo.update(updated_team)
 
         assert is_err(result)
         assert result.error.type == RepositoryErrorType.NOT_FOUND
         assert "not found" in result.error.message
-        # Verify execute was called three times (is_update check + UPDATE + NOT_FOUND check)
+        # Verify execute was called three times (existence check + UPDATE + refetch)
         assert execute_mock.call_count == 3

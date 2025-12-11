@@ -8,19 +8,15 @@ import pytest
 from app.core.result import is_err, is_ok
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork, RepositoryErrorType
-from app.domain.value_objects import TeamId, TeamName, Version
+from app.domain.value_objects import TeamId, TeamName
 
 
 @pytest.mark.anyio
 async def test_team_repository_save_and_get(uow: IUnitOfWork) -> None:
     """Test saving and retrieving a team."""
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("Alpha Team").expect(
             "TeamName.from_primitive should succeed for valid name"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -63,13 +59,9 @@ async def test_team_repository_get_non_existent_raises_error(
 @pytest.mark.anyio
 async def test_team_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting a team via the repository."""
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("ToDelete Team").expect(
             "TeamName.from_primitive should succeed for valid name"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -102,13 +94,9 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     """Test that repository correctly saves and retrieves timestamps."""
     before_creation = datetime.now(UTC)
 
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("Timestamp Team").expect(
             "TeamName.from_primitive should succeed for valid name"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -131,13 +119,9 @@ async def test_team_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 @pytest.mark.anyio
 async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing team."""
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("Update Team").expect(
             "TeamName.from_primitive should succeed for valid name"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -152,13 +136,15 @@ async def test_team_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> No
 
     await asyncio.sleep(0.01)
 
-    saved_team.name = TeamName.from_primitive("Updated Team").expect(
-        "TeamName.from_primitive should succeed for valid name"
+    saved_team.change_name(
+        TeamName.from_primitive("Updated Team").expect(
+            "TeamName.from_primitive should succeed for valid name"
+        )
     )
 
     async with uow:
         repo = uow.GetRepository(Team)
-        update_result = await repo.add(saved_team)
+        update_result = await repo.update(saved_team)
         assert is_ok(update_result)
         updated_team = update_result.value
         commit_result = await uow.commit()
@@ -174,13 +160,9 @@ async def test_team_repository_concurrent_update_returns_version_conflict(
 ) -> None:
     """Test that concurrent updates to the same team return VERSION_CONFLICT."""
     # Create initial team
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("Concurrent Team").expect(
             "TeamName.from_primitive should succeed"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -217,7 +199,7 @@ async def test_team_repository_concurrent_update_returns_version_conflict(
     )
     async with uow:
         repo = uow.GetRepository(Team)
-        update1_result = await repo.add(team1_updated)
+        update1_result = await repo.update(team1_updated)
         assert is_ok(update1_result)
         updated_team1 = update1_result.value
         assert updated_team1.version.to_primitive() == 1  # Version incremented
@@ -232,7 +214,7 @@ async def test_team_repository_concurrent_update_returns_version_conflict(
     )
     async with uow:
         repo = uow.GetRepository(Team)
-        update2_result = await repo.add(team2_updated)
+        update2_result = await repo.update(team2_updated)
         assert is_err(update2_result)
         error = update2_result.error
         assert error.type == RepositoryErrorType.VERSION_CONFLICT
@@ -245,13 +227,9 @@ async def test_team_repository_version_increments_on_update(
     uow: IUnitOfWork,
 ) -> None:
     """Test that version increments correctly on each update."""
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("Version Team").expect(
             "TeamName.from_primitive should succeed"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 
@@ -281,7 +259,7 @@ async def test_team_repository_version_increments_on_update(
 
     async with uow:
         repo = uow.GetRepository(Team)
-        update_result = await repo.add(team_v0_updated)
+        update_result = await repo.update(team_v0_updated)
         assert is_ok(update_result)
         team_v1 = update_result.value
         assert team_v1.version.to_primitive() == 1
@@ -304,7 +282,7 @@ async def test_team_repository_version_increments_on_update(
 
     async with uow:
         repo = uow.GetRepository(Team)
-        update_result = await repo.add(team_v1_updated)
+        update_result = await repo.update(team_v1_updated)
         assert is_ok(update_result)
         team_v2 = update_result.value
         assert team_v2.version.to_primitive() == 2
@@ -317,13 +295,9 @@ async def test_team_repository_new_team_has_version_zero(
     uow: IUnitOfWork,
 ) -> None:
     """Test that newly created teams start with version 0."""
-    team = Team(
-        id=TeamId.generate().expect("TeamId.generate should succeed"),
+    team = Team.form(
         name=TeamName.from_primitive("New Team").expect(
             "TeamName.from_primitive should succeed"
-        ),
-        version=Version.from_primitive(0).expect(
-            "Version.from_primitive should succeed"
         ),
     )
 

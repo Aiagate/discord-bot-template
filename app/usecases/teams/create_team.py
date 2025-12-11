@@ -7,7 +7,7 @@ from injector import inject
 from app.core.result import Ok, Result, combine_all, is_err
 from app.domain.aggregates.team import Team
 from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import TeamId, TeamName, Version
+from app.domain.value_objects import TeamName
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
 
@@ -30,21 +30,17 @@ class CreateTeamHandler(RequestHandler[CreateTeamCommand, Result[str, UseCaseErr
 
     async def handle(self, request: CreateTeamCommand) -> Result[str, UseCaseError]:
         """Create new team and return as DTO within a Result."""
-        team_id_result = TeamId.generate()
         team_name_result = TeamName.from_primitive(request.name)
-        version_result = Version.from_primitive(0)
 
-        combined_result = combine_all(
-            (team_id_result, team_name_result, version_result)
-        ).map_err(
+        combined_result = combine_all((team_name_result,)).map_err(
             lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
         )
         if is_err(combined_result):
             return combined_result
 
-        team_id, team_name, version = combined_result.unwrap()
+        (team_name,) = combined_result.unwrap()
 
-        team = Team(id=team_id, name=team_name, version=version)
+        team = Team.form(name=team_name)
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team)

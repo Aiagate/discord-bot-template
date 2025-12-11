@@ -1,5 +1,6 @@
 """Automatic ORM mapping registry with decorator-based registration."""
 
+import inspect
 import logging
 from dataclasses import fields, is_dataclass
 from typing import Any, ClassVar, TypeVar, cast, get_args, get_origin, get_type_hints
@@ -12,6 +13,19 @@ from app.domain.interfaces import IValueObject
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+def _get_entity_properties(entity_type: type) -> dict[str, property]:
+    """Get all properties defined on an entity class.
+
+    Returns a dictionary mapping property name to property object.
+    Excludes dunder properties (starting with __).
+    """
+    return {
+        name: obj
+        for name, obj in inspect.getmembers(entity_type)
+        if isinstance(obj, property) and not name.startswith("__")
+    }
 
 
 def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
@@ -37,17 +51,31 @@ def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
         raise TypeError(f"Expected dataclass, got {type(entity).__name__}")
 
     result: dict[str, Any] = {}
+    entity_type = type(entity)
 
-    for field in fields(entity):
-        field_value = getattr(entity, field.name)
+    # Check if entity has properties (like Team with _id -> id property)
+    properties = _get_entity_properties(entity_type)
 
-        # Check if field value implements IValueObject
-        if isinstance(field_value, IValueObject):
-            # Convert to primitive
-            result[field.name] = field_value.to_primitive()
-        else:
-            # Use as-is for primitive types
-            result[field.name] = field_value
+    if properties:
+        # Property-based entity (Team pattern)
+        # Use property names as ORM column names
+        for name in properties:
+            field_value = getattr(entity, name)
+
+            if isinstance(field_value, IValueObject):
+                result[name] = field_value.to_primitive()
+            else:
+                result[name] = field_value
+    else:
+        # Field-based entity (User pattern - legacy)
+        # Use dataclass field names directly
+        for field in fields(entity):
+            field_value = getattr(entity, field.name)
+
+            if isinstance(field_value, IValueObject):
+                result[field.name] = field_value.to_primitive()
+            else:
+                result[field.name] = field_value
 
     logger.debug(
         f"Converted {type(entity).__name__} to ORM dict: {list(result.keys())}"
@@ -56,11 +84,95 @@ def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
     return result
 
 
+def _build_field_to_property_mapping(entity_type: type) -> dict[str, str]:
+    """Build mapping from private field names to property names.
+
+    For entities with private fields (e.g., _id) and corresponding properties
+    (e.g., id), builds a mapping from field name to property name.
+
+    Returns:
+        Dictionary mapping field name to property name (e.g., {"_id": "id"}).
+    """
+    properties = _get_entity_properties(entity_type)
+    property_names = set(properties.keys())
+
+    mapping: dict[str, str] = {}
+    for field in fields(entity_type):
+        field_name = field.name
+        # Check if field name starts with _ and has corresponding property
+        if field_name.startswith("_"):
+            public_name = field_name[1:]  # Remove leading underscore
+            if public_name in property_names:
+                mapping[field_name] = public_name
+
+    return mapping
+
+
+def _convert_orm_value_to_field_value(
+    orm_value: Any,
+    field_type: type,
+    field_name: str,
+) -> Any:
+    """Convert an ORM value to the appropriate field value.
+
+    Handles IValueObject conversion and Optional types.
+    """
+    # Check if the field type is Optional (Union with None)
+    origin = get_origin(field_type)
+    args = get_args(field_type)
+
+    # Check if it's a Union type and contains NoneType
+    is_optional = origin is not None and type(None) in args
+    actual_type = field_type
+
+    if is_optional:
+        # Extract the non-None type from Optional[T]
+        non_none_types = [arg for arg in args if arg is not type(None)]
+        if non_none_types:
+            actual_type = non_none_types[0]
+
+    # Check if the actual type implements IValueObject
+    if hasattr(actual_type, "from_primitive") and callable(actual_type.from_primitive):
+        # Special handling for None values
+        if orm_value is None:
+            if is_optional:
+                return None
+            elif field_name.lstrip("_") == "id" and hasattr(actual_type, "generate"):
+                # For non-Optional ID fields, generate a new ID
+                id_result = actual_type.generate()
+                if is_err(id_result):
+                    raise ValueError(f"Failed to generate ID: {id_result.error}")
+                assert is_ok(id_result)  # type: ignore[reportAssertType]
+                return id_result.unwrap()
+            else:
+                raise ValueError(
+                    f"Field '{field_name}' is None but "
+                    f"{actual_type.__name__} is not Optional and has no "
+                    f"generate() method"
+                )
+        else:
+            # Convert from primitive using from_primitive()
+            result = cast(Result[Any, Any], actual_type.from_primitive(orm_value))
+            if is_err(result):
+                raise ValueError(
+                    f"Failed to convert field '{field_name}' "
+                    f"from primitive: {result.error}"
+                )
+            assert is_ok(result)  # type: ignore[reportAssertType]
+            return result.unwrap()
+    else:
+        # Use primitive value as-is
+        return orm_value
+
+
 def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
     """Convert ORM model to domain entity.
 
     Automatically converts primitive fields to IValueObject instances
     based on type annotations.
+
+    For property-based entities with init=False fields, values are set
+    directly using object.__setattr__ after initial construction.
 
     Args:
         orm_instance: ORM model instance
@@ -85,7 +197,11 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
     # Get type hints from the entity class
     type_hints = get_type_hints(entity_type)
 
-    kwargs: dict[str, Any] = {}
+    # Build mapping from private field names to property names
+    field_to_property = _build_field_to_property_mapping(entity_type)
+
+    init_kwargs: dict[str, Any] = {}
+    non_init_values: dict[str, Any] = {}
 
     for field in fields(entity_type):
         field_name = field.name
@@ -97,63 +213,34 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
                 f"in {entity_type.__name__}"
             )
 
+        # Determine ORM column name
+        # For property-based entities, use the property name (e.g., "id" not "_id")
+        orm_column_name = field_to_property.get(field_name, field_name)
+
         # Get the value from ORM instance
-        orm_value = getattr(orm_instance, field_name, None)
+        orm_value = getattr(orm_instance, orm_column_name, None)
 
-        # Check if the field type is Optional (Union with None)
-        origin = get_origin(field_type)
-        args = get_args(field_type)
+        # Convert the value
+        converted_value = _convert_orm_value_to_field_value(
+            orm_value, field_type, field_name
+        )
 
-        # Check if it's a Union type and contains NoneType
-        is_optional = origin is not None and type(None) in args
-        actual_type = field_type
-
-        if is_optional:
-            # Extract the non-None type from Optional[T]
-            non_none_types = [arg for arg in args if arg is not type(None)]
-            if non_none_types:
-                actual_type = non_none_types[0]
-
-        # Check if the actual type implements IValueObject
-        if hasattr(actual_type, "from_primitive") and callable(
-            actual_type.from_primitive
-        ):
-            # Special handling for None values
-            if orm_value is None:
-                if is_optional:
-                    # For Optional fields, return None as-is
-                    kwargs[field_name] = None
-                elif field_name == "id" and hasattr(actual_type, "generate"):
-                    # For non-Optional ID fields, generate a new ID
-                    id_result = actual_type.generate()
-                    if is_err(id_result):
-                        raise ValueError(f"Failed to generate ID: {id_result.error}")
-                    assert is_ok(id_result)  # type: ignore[reportAssertType]
-                    kwargs[field_name] = id_result.unwrap()
-                else:
-                    raise ValueError(
-                        f"Field '{field_name}' is None but "
-                        f"{actual_type.__name__} is not Optional and has no "
-                        f"generate() method"
-                    )
-            else:
-                # Convert from primitive using from_primitive()
-                result = cast(Result[Any, Any], actual_type.from_primitive(orm_value))
-                if is_err(result):
-                    # This should ideally not happen if data in DB is valid
-                    raise ValueError(
-                        f"Failed to convert field '{field_name}' "
-                        f"from primitive: {result.error}"
-                    )
-                assert is_ok(result)  # type: ignore[reportAssertType]
-                kwargs[field_name] = result.unwrap()
+        # Separate init and non-init fields
+        if field.init:
+            init_kwargs[field_name] = converted_value
         else:
-            # Use primitive value as-is
-            kwargs[field_name] = orm_value
+            non_init_values[field_name] = converted_value
 
     logger.debug(f"Converted {type(orm_instance).__name__} to {entity_type.__name__}")
 
-    return entity_type(**kwargs)
+    # Create entity with init fields only
+    entity = entity_type(**init_kwargs)
+
+    # Set non-init fields directly (for init=False fields like Team._id)
+    for field_name, value in non_init_values.items():
+        object.__setattr__(entity, field_name, value)
+
+    return entity
 
 
 class ORMMappingRegistry:

@@ -123,8 +123,8 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     )
 
     async with uow:
-        repo = uow.GetRepository(User)  # IRepository[User] - add only
-        update_result = await repo.add(saved_user)
+        repo = uow.GetRepository(User)
+        update_result = await repo.update(saved_user)
         assert isinstance(update_result, Ok)
         updated_user = update_result.value
         commit_result = await uow.commit()

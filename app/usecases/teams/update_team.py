@@ -82,7 +82,7 @@ class UpdateTeamHandler(RequestHandler[UpdateTeamCommand, Result[str, UseCaseErr
             team.change_name(new_team_name)
 
             # Save updated team (optimistic locking happens here)
-            update_result = (await team_repo.add(team)).map_err(
+            update_result = (await team_repo.update(team)).map_err(
                 lambda e: _map_update_error(e, request.team_id)
             )
             if is_err(update_result):
