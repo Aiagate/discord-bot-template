@@ -27,8 +27,7 @@ async def test_repository_get_non_existent_raises_error(uow: IUnitOfWork) -> Non
 @pytest.mark.anyio
 async def test_repository_delete(uow: IUnitOfWork) -> None:
     """Test deleting an entity via the repository."""
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("ToDelete").expect(
             "DisplayName.from_primitive should succeed"
         ),
@@ -68,8 +67,7 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
     """Test that repository correctly saves and retrieves timestamps."""
     before_creation = datetime.now(UTC)
 
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("TimestampTest").expect(
             "DisplayName.from_primitive should succeed"
         ),
@@ -97,8 +95,7 @@ async def test_repository_saves_timestamps(uow: IUnitOfWork) -> None:
 @pytest.mark.anyio
 async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
     """Test that updated_at is automatically updated when saving existing entity."""
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("UpdateTest").expect(
             "DisplayName.from_primitive should succeed"
         ),
@@ -118,8 +115,10 @@ async def test_repository_updates_timestamp_on_save(uow: IUnitOfWork) -> None:
 
     await asyncio.sleep(0.01)
 
-    saved_user.email = Email.from_primitive("updated@example.com").expect(
-        "Email.from_primitive should succeed for valid email"
+    saved_user.change_email(
+        Email.from_primitive("updated@example.com").expect(
+            "Email.from_primitive should succeed for valid email"
+        )
     )
 
     async with uow:

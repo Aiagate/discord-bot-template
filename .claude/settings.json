@@ -15,7 +15,11 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)"
     ],
-    "deny": [],
+    "deny": [
+      "NotebookEdit(./**/*)",
+      "ExitPlanMode",
+      "SlashCommand(*)"
+    ],
     "ask": []
   },
   "statusLine": {
