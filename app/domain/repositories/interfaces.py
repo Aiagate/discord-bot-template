@@ -14,6 +14,7 @@ class RepositoryErrorType(Enum):
     NOT_FOUND = auto()
     UNEXPECTED = auto()
     VERSION_CONFLICT = auto()
+    ALREADY_EXISTS = auto()
 
 
 @dataclass(frozen=True)
@@ -36,7 +37,18 @@ class IRepository[T](ABC):
 
     @abstractmethod
     async def add(self, entity: T) -> Result[T, RepositoryError]:
-        """Add or update entity."""
+        """Add new entity.
+
+        Returns ALREADY_EXISTS error if entity already exists in the database.
+        """
+        pass
+
+    @abstractmethod
+    async def update(self, entity: T) -> Result[T, RepositoryError]:
+        """Update existing entity.
+
+        Returns NOT_FOUND error if entity doesn't exist in the database.
+        """
         pass
 
     @abstractmethod
