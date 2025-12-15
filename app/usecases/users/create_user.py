@@ -7,7 +7,7 @@ from injector import inject
 from app.core.result import Ok, Result, combine_all, is_err
 from app.domain.aggregates.user import User
 from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import DisplayName, Email, UserId
+from app.domain.value_objects import DisplayName, Email
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
 
@@ -31,21 +31,18 @@ class CreateUserHandler(RequestHandler[CreateUserCommand, Result[str, UseCaseErr
 
     async def handle(self, request: CreateUserCommand) -> Result[str, UseCaseError]:
         """Create new user and return as DTO within a Result."""
-        user_id_result = UserId.generate()
         email_result = Email.from_primitive(request.email)
         display_name_result = DisplayName.from_primitive(request.display_name)
 
-        combined_result = combine_all(
-            (user_id_result, email_result, display_name_result)
-        ).map_err(
+        combined_result = combine_all((email_result, display_name_result)).map_err(
             lambda e: UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(e))
         )
         if is_err(combined_result):
             return combined_result
 
-        user_id, email, display_name = combined_result.unwrap()
+        email, display_name = combined_result.unwrap()
 
-        user = User(id=user_id, display_name=display_name, email=email)
+        user = User.register(display_name=display_name, email=email)
 
         async with self._uow:
             user_repo = self._uow.GetRepository(User)

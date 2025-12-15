@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from app.core.result import is_err
 from app.domain.aggregates.user import User
-from app.domain.value_objects import DisplayName, Email, UserId
+from app.domain.value_objects import DisplayName, Email
 
 
 def test_create_user_with_empty_name_raises_error() -> None:
@@ -16,8 +16,7 @@ def test_create_user_with_empty_name_raises_error() -> None:
 
 def test_user_change_email() -> None:
     """Test that the change_email method updates the user's email."""
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("Test User").expect(
             "DisplayName.from_primitive should succeed for valid display name"
         ),
@@ -35,15 +34,13 @@ def test_user_change_email() -> None:
 
 def test_user_creation_with_valid_data() -> None:
     """Test creating a user with valid data."""
-    user_id = UserId.generate().expect("UserId.generate should succeed")
     email = Email.from_primitive("alice@example.com").expect(
         "Email.from_primitive should succeed for valid email"
     )
     display_name = DisplayName.from_primitive("Alice").expect(
         "DisplayName.from_primitive should succeed for valid display name"
     )
-    user = User(id=user_id, display_name=display_name, email=email)
-    assert user.id == user_id
+    user = User.register(display_name=display_name, email=email)
     assert user.display_name == display_name
     assert user.email == email
     assert isinstance(user.created_at, datetime)
@@ -53,8 +50,7 @@ def test_user_creation_with_valid_data() -> None:
 def test_user_timestamps_use_utc() -> None:
     """Test that user timestamps use UTC timezone."""
     before = datetime.now(UTC)
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("Test").expect(
             "DisplayName.from_primitive should succeed for valid display name"
         ),
@@ -66,25 +62,6 @@ def test_user_timestamps_use_utc() -> None:
 
     assert before <= user.created_at <= after
     assert before <= user.updated_at <= after
-
-
-def test_user_with_explicit_timestamps() -> None:
-    """Test creating user with explicit timestamps."""
-    specific_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
-        display_name=DisplayName.from_primitive("Test").expect(
-            "DisplayName.from_primitive should succeed for valid display name"
-        ),
-        email=Email.from_primitive("test@example.com").expect(
-            "Email.from_primitive should succeed for valid email"
-        ),
-        created_at=specific_time,
-        updated_at=specific_time,
-    )
-
-    assert user.created_at == specific_time
-    assert user.updated_at == specific_time
 
 
 def test_creation_with_invalid_email_returns_err() -> None:

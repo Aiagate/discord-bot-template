@@ -18,6 +18,7 @@ class UserORM(SQLModel, table=True):
     id: str | None = Field(default=None, primary_key=True, max_length=26)
     display_name: str = Field(max_length=255, index=True)
     email: str = Field(max_length=255, unique=True, index=True)
+    version: int = Field(default=0)
     created_at: datetime = Field(
         sa_column=Column(DateTime(timezone=True), server_default=func.now())
     )

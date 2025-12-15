@@ -68,8 +68,7 @@ async def test_generic_repository_get_by_id_sqlalchemy_error(
 @pytest.mark.anyio
 async def test_generic_repository_add_sqlalchemy_error(uow: IUnitOfWork) -> None:
     """Test that add returns RepositoryError on SQLAlchemy error."""
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("TestUser").expect(
             "DisplayName.from_primitive should succeed"
         ),
@@ -141,8 +140,7 @@ async def test_generic_repository_delete_non_existent_entity(
     uow: IUnitOfWork,
 ) -> None:
     """Test that delete returns NOT_FOUND when entity doesn't exist in database."""
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("NonExistent").expect(
             "DisplayName.from_primitive should succeed"
         ),
@@ -164,8 +162,7 @@ async def test_generic_repository_delete_non_existent_entity(
 async def test_generic_repository_delete_sqlalchemy_error(uow: IUnitOfWork) -> None:
     """Test that delete returns RepositoryError on SQLAlchemy error."""
     # First create a user
-    user = User(
-        id=UserId.generate().expect("UserId.generate should succeed"),
+    user = User.register(
         display_name=DisplayName.from_primitive("ToDelete").expect(
             "DisplayName.from_primitive should succeed"
         ),
