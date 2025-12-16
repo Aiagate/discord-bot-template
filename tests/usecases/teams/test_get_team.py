@@ -30,7 +30,7 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
 
     # Now test retrieving it
     handler = GetTeamHandler(uow)
-    query = GetTeamQuery(team_id=saved_team.id.to_primitive())
+    query = GetTeamQuery(id=saved_team.id.to_primitive())
     result = await handler.handle(query)
 
     assert is_ok(result)
@@ -44,7 +44,7 @@ async def test_get_team_handler_not_found(uow: IUnitOfWork) -> None:
     handler = GetTeamHandler(uow)
 
     # Use a valid ULID that doesn't exist in the database
-    query = GetTeamQuery(team_id="01ARZ3NDEKTSV4RRFFQ69G5FAV")
+    query = GetTeamQuery(id="01ARZ3NDEKTSV4RRFFQ69G5FAV")
     result = await handler.handle(query)
 
     assert is_err(result)

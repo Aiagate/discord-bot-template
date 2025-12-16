@@ -27,7 +27,9 @@ def upgrade() -> None:
         "users", sa.Column("version", sa.Integer(), nullable=False, server_default="0")
     )
     # Remove server_default after creation (application manages it)
-    op.alter_column("users", "version", server_default=None)
+    # This requires batch mode in SQLite
+    with op.batch_alter_table("users") as batch_op:
+        batch_op.alter_column("version", server_default=None)
 
 
 def downgrade() -> None:

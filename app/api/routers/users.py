@@ -41,7 +41,7 @@ async def create_user(request: CreateUserRequest) -> CreateUserResponse:
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(user_id: str) -> UserResponse:
     """Get a user by ID."""
-    query = GetUserQuery(user_id=user_id)
+    query = GetUserQuery(id=user_id)
     result = await Mediator.send_async(query)
 
     if is_err(result):

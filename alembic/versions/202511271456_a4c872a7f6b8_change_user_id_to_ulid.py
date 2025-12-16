@@ -25,18 +25,13 @@ def upgrade() -> None:
     # This is acceptable for development, but in production you'd need a data migration
     op.execute("DELETE FROM users")
 
-    # Step 2: Drop the old primary key constraint and id column
-    op.drop_constraint("users_pkey", "users", type_="primary")
-    op.drop_column("users", "id")
-
-    # Step 3: Create new id column as VARCHAR(26) for ULID
-    op.add_column(
-        "users",
-        sa.Column("id", sa.String(length=26), nullable=False),
-    )
-
-    # Step 4: Re-create primary key constraint
-    op.create_primary_key("users_pkey", "users", ["id"])
+    # Step 2 & 3 & 4: Use batch mode to recreate the table with the new ID column
+    with op.batch_alter_table("users") as batch_op:
+        # In batch mode, we don't need to explicitly drop the PK constraint if we are changing the column.
+        # However, to be cleaner, we can just drop the old ID and add the new one.
+        batch_op.drop_column("id")
+        batch_op.add_column(sa.Column("id", sa.String(length=26), nullable=False))
+        batch_op.create_primary_key("users_pkey", ["id"])
 
 
 def downgrade() -> None:
@@ -44,15 +39,10 @@ def downgrade() -> None:
     # Step 1: Drop existing data (BREAKING CHANGE)
     op.execute("DELETE FROM users")
 
-    # Step 2: Drop the primary key constraint and id column
-    op.drop_constraint("users_pkey", "users", type_="primary")
-    op.drop_column("users", "id")
-
-    # Step 3: Create id column as Integer with autoincrement
-    op.add_column(
-        "users",
-        sa.Column("id", sa.Integer(), nullable=False, autoincrement=True),
-    )
-
-    # Step 4: Re-create primary key constraint
-    op.create_primary_key("users_pkey", "users", ["id"])
+    # Step 2 & 3 & 4: Use batch mode to recreate the table with the old ID column
+    with op.batch_alter_table("users") as batch_op:
+        batch_op.drop_column("id")
+        batch_op.add_column(
+            sa.Column("id", sa.Integer(), nullable=False, autoincrement=True)
+        )
+        batch_op.create_primary_key("users_pkey", ["id"])

@@ -21,14 +21,23 @@ class CreateTeamCommand(Request[Result[str, UseCaseError]]):
         self.name = name
 
 
-class CreateTeamHandler(RequestHandler[CreateTeamCommand, Result[str, UseCaseError]]):
+class CreateTeamResult:
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+
+class CreateTeamHandler(
+    RequestHandler[CreateTeamCommand, Result[CreateTeamResult, UseCaseError]]
+):
     """Handler for CreateTeam command."""
 
     @inject
     def __init__(self, uow: IUnitOfWork) -> None:
         self._uow = uow
 
-    async def handle(self, request: CreateTeamCommand) -> Result[str, UseCaseError]:
+    async def handle(
+        self, request: CreateTeamCommand
+    ) -> Result[CreateTeamResult, UseCaseError]:
         """Create new team and return as DTO within a Result."""
         team_name_result = TeamName.from_primitive(request.name)
 
@@ -58,6 +67,5 @@ class CreateTeamHandler(RequestHandler[CreateTeamCommand, Result[str, UseCaseErr
             if is_err(commit_result):
                 return commit_result
 
-            logger.info("Created team: %s", team)
-            team_id = team.id.to_primitive()
-            return Ok(team_id)
+            id = team.id.to_primitive()
+            return Ok(CreateTeamResult(id=id))

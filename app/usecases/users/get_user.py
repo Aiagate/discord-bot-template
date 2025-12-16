@@ -25,8 +25,8 @@ class GetUserResult:
 class GetUserQuery(Request[Result[GetUserResult, UseCaseError]]):
     """Query to get user by ID."""
 
-    def __init__(self, user_id: str) -> None:
-        self.user_id = user_id
+    def __init__(self, id: str) -> None:
+        self.user_id = id
 
 
 class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseError]]):
@@ -61,7 +61,6 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
                 return user_result
 
             user = user_result.unwrap()
-            logger.debug("GetUserHandler: user=%s", user)
             user_dto = UserDTO(
                 id=user.id.to_primitive(),
                 display_name=user.display_name.to_primitive(),

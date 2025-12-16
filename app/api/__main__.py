@@ -38,7 +38,13 @@ app = FastAPI(title="Discord Bot API", lifespan=lifespan)
 app.include_router(teams.router)
 app.include_router(users.router)
 
-if __name__ == "__main__":
+
+def start() -> None:
+    """Entry point for the FastAPI application."""
     import uvicorn
 
     uvicorn.run("app.api.main:app", host="127.0.0.1", port=8000, reload=True)
+
+
+if __name__ == "__main__":
+    start()

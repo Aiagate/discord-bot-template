@@ -4,7 +4,7 @@
 
 from discord.ext import commands
 
-from app.cogs.base_cog import BaseCog
+from app.bot.cogs.base_cog import BaseCog
 from app.mediator import Mediator
 from app.usecases.teams.create_team import CreateTeamCommand
 from app.usecases.teams.get_team import GetTeamQuery
@@ -25,10 +25,10 @@ class TeamsCog(BaseCog, name="Teams"):
     async def teams_get(
         self,
         ctx: commands.Context[commands.Bot],
-        team_id: str,
+        id: str,
     ) -> None:
         """Get team by ID. Usage: !teams get <team_id>"""
-        query = GetTeamQuery(team_id=team_id)
+        query = GetTeamQuery(id=id)
 
         message = await (
             Mediator.send_async(query)
@@ -52,7 +52,7 @@ class TeamsCog(BaseCog, name="Teams"):
         message = await (
             Mediator.send_async(CreateTeamCommand(name=name))
             .and_then(  # type: ignore[arg-type, return-value]
-                lambda result: Mediator.send_async(GetTeamQuery(result.team_id))
+                lambda result: Mediator.send_async(GetTeamQuery(id=result.id))
             )
             .map(  # type: ignore[arg-type, return-value]
                 lambda value: (
@@ -76,7 +76,7 @@ class TeamsCog(BaseCog, name="Teams"):
         message = await (
             Mediator.send_async(UpdateTeamCommand(team_id=team_id, new_name=new_name))
             .and_then(  # type: ignore[arg-type, return-value]
-                lambda team_id: Mediator.send_async(GetTeamQuery(team_id))
+                lambda result: Mediator.send_async(GetTeamQuery(id=result.id))
             )
             .map(  # type: ignore[arg-type, return-value]
                 lambda value: (

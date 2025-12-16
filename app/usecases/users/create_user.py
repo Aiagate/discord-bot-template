@@ -22,14 +22,23 @@ class CreateUserCommand(Request[Result[str, UseCaseError]]):
         self.email = email
 
 
-class CreateUserHandler(RequestHandler[CreateUserCommand, Result[str, UseCaseError]]):
+class CreateUserResult:
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+
+class CreateUserHandler(
+    RequestHandler[CreateUserCommand, Result[CreateUserResult, UseCaseError]]
+):
     """Handler for CreateUser command."""
 
     @inject
     def __init__(self, uow: IUnitOfWork) -> None:
         self._uow = uow
 
-    async def handle(self, request: CreateUserCommand) -> Result[str, UseCaseError]:
+    async def handle(
+        self, request: CreateUserCommand
+    ) -> Result[CreateUserResult, UseCaseError]:
         """Create new user and return as DTO within a Result."""
         email_result = Email.from_primitive(request.email)
         display_name_result = DisplayName.from_primitive(request.display_name)
@@ -60,6 +69,5 @@ class CreateUserHandler(RequestHandler[CreateUserCommand, Result[str, UseCaseErr
             if is_err(commit_result):
                 return commit_result
 
-            logger.info("Created user: %s", user)
-            user_id = user.id.to_primitive()
-            return Ok(user_id)
+            id = user.id.to_primitive()
+            return Ok(CreateUserResult(id=id))

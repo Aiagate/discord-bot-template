@@ -42,17 +42,23 @@
 - `discord.ext.commands`のCogを使用してコマンドをモジュール化。
 - Botの機能を簡単に拡張可能。
 
-### 7. **型安全性**
+### 7. **FastAPI 統合 (Web API)**
+
+- Discord Botと並行して動作するREST API。
+- 共通のユースケースを再利用し、外部システムとの連携が可能。
+- Swagger UI によるインタラクティブなドキュメント。
+
+### 8. **型安全性**
 
 - Pythonの型ヒントを活用し、静的解析ツールによるエラー検出を強化。
 
-### 8. **テスト環境の整備**
+### 9. **テスト環境の整備**
 
 - `pytest`と`pytest-asyncio`を使用したテスト環境を構築。
 - `pytest-cov`によるコードカバレッジ測定。
 - インメモリSQLiteを使用した高速なテスト実行。
 
-### 9. **コード品質管理**
+### 10. **コード品質管理**
 
 - `Ruff`: 高速なコードフォーマッターとリンター。
 - `Pyright`: 厳格な型チェック (strict モード)。
@@ -63,8 +69,12 @@
 ```text
 .
 ├── app/                           # アプリケーション本体
-│   ├── __main__.py                # エントリーポイント
-│   ├── cogs/                      # Cogモジュール (users_cog.py, teams_cog.py)
+│   ├── api/                       # Web API層
+│   │   ├── __main__.py            # APIエントリーポイント (start-api)
+│   │   └── routers/               # APIルーター
+│   ├── bot/                       # Discord Bot層
+│   │   ├── __main__.py            # Botエントリーポイント (start-bot)
+│   │   └── cogs/                  # Cogモジュール
 │   ├── core/                      # アプリケーションコア (Resultクラスなど)
 │   ├── container.py               # DIコンテナ設定
 │   ├── mediator.py                # Mediatorパターンの実装
@@ -83,19 +93,7 @@
 ├── alembic/                       # Alembicマイグレーション
 │   └── versions/                  # マイグレーションファイル
 ├── docs/                          # ドキュメント
-│   ├── ARCHITECTURE.md
-│   └── domain/
-│       └── DOMAIN_IMPLEMENTATION_GUIDE.md
 ├── tests/                         # テストコード
-│   ├── conftest.py                # pytest設定・フィクスチャ
-│   ├── core/
-│   ├── domain/
-│   │   ├── aggregates/
-│   │   └── value_objects/
-│   ├── infrastructure/
-│   └── usecases/
-│       ├── users/
-│       └── teams/
 ├── .pre-commit-config.yaml        # Pre-commit設定
 ├── pyproject.toml                 # プロジェクト設定
 └── README.md                      # このファイル
@@ -157,10 +155,18 @@
    uv run alembic current
    ```
 
-6. Botを起動:
+6. アプリケーションを起動:
+
+   Discord Botを起動:
 
    ```bash
-   uv run -m app
+   uv run start-bot
+   ```
+
+   または、Web APIサーバーを起動:
+
+   ```bash
+   uv run start-api
    ```
 
 ## データベース管理
@@ -241,15 +247,18 @@ uv run pytest
 このテンプレートは以下のレイヤーで構成されています：
 
 ```text
-┌─────────────────────────────────────┐
-│  Presentation Layer (Discord Cog)   │  Discord.pyのCog
-├─────────────────────────────────────┤
-│    Application Layer (UseCases)     │  ビジネスロジック
-├─────────────────────────────────────┤
-│     Domain Layer (Aggregates)       │  ドメインモデル
-├─────────────────────────────────────┤
-│  Infrastructure Layer (Repository)  │  永続化・外部サービス
-└─────────────────────────────────────┘
+┌─────────────────────────────────────┐  ┌─────────────────────────────────────┐
+│    Presentation Layer (Web API)     │  │  Presentation Layer (Discord Bot)   │
+│           (FastAPI)                 │  │          (discord.py)               │
+└──────────────────┬──────────────────┘  └──────────────────┬──────────────────┘
+                   │                                        │
+┌──────────────────▼────────────────────────────────────────▼──────────────────┐
+│                        Application Layer (UseCases)                          │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                         Domain Layer (Aggregates)                            │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                     Infrastructure Layer (Repository)                        │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 依存関係の方向
