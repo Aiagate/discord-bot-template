@@ -2,12 +2,29 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug Discord Bot",
+      "name": "Debug Bot",
       "type": "debugpy",
       "request": "launch",
-      "module": "app",
+      "module": "app.bot.__main__",
       "console": "integratedTerminal",
       "envFile": "${workspaceFolder}/.env.local"
+    },
+    {
+      "name": "Debug API",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.api.__main__",
+      "console": "integratedTerminal",
+      "envFile": "${workspaceFolder}/.env.local"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Both",
+      "configurations": [
+        "Debug Bot",
+        "Debug API"
+      ]
     }
   ]
 }

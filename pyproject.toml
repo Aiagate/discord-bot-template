@@ -16,6 +16,10 @@ dependencies = [
     "uvicorn>=0.38.0",
 ]
 
+[project.scripts]
+start-bot = "app.bot.__main__:main"
+start-api = "app.api.__main__:start"
+
 [dependency-groups]
 dev = [
     "anyio>=4.11.0",
@@ -95,3 +99,13 @@ addopts = [
     "--cov-report=html",
 ]
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.uv]
+package = true
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

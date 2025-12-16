@@ -38,7 +38,7 @@ async def test_update_team_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert is_ok(result)
-    team_id = result.value  # Now it's a str
+    team_id = result.value.id  # Now it's a str
     assert team_id == saved_team.id.to_primitive()
     # Version verification is no longer done here
     # (version is now part of TeamDTO via GetTeamQuery)

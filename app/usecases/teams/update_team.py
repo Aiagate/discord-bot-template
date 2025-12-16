@@ -45,14 +45,23 @@ class UpdateTeamCommand(Request[Result[str, UseCaseError]]):
         self.new_name = new_name
 
 
-class UpdateTeamHandler(RequestHandler[UpdateTeamCommand, Result[str, UseCaseError]]):
+class UpdateTeamResult:
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+
+class UpdateTeamHandler(
+    RequestHandler[UpdateTeamCommand, Result[UpdateTeamResult, UseCaseError]]
+):
     """Handler for UpdateTeam command."""
 
     @inject
     def __init__(self, uow: IUnitOfWork) -> None:
         self._uow = uow
 
-    async def handle(self, request: UpdateTeamCommand) -> Result[str, UseCaseError]:
+    async def handle(
+        self, request: UpdateTeamCommand
+    ) -> Result[UpdateTeamResult, UseCaseError]:
         """Update team name and return updated team info within a Result."""
         # Validate inputs
         team_id_result = TeamId.from_primitive(request.team_id)
@@ -97,6 +106,5 @@ class UpdateTeamHandler(RequestHandler[UpdateTeamCommand, Result[str, UseCaseErr
                 return commit_result
 
             updated_team = update_result.unwrap()
-            logger.info("Updated team: %s", updated_team)
 
-            return Ok(updated_team.id.to_primitive())
+            return Ok(UpdateTeamResult(id=updated_team.id.to_primitive()))

@@ -19,7 +19,7 @@ async def test_create_team_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert is_ok(result)
-    team_id = result.value  # Now it's a str
+    team_id = result.value.id  # Now it's a str
     assert team_id  # ULID string should exist
     assert len(team_id) == 26  # ULID is 26 characters
 

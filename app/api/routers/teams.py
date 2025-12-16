@@ -47,7 +47,7 @@ async def create_team(request: CreateTeamRequest) -> CreateTeamResponse:
 @router.get("/{team_id}", response_model=TeamResponse)
 async def get_team(team_id: str) -> TeamResponse:
     """Get a team by ID."""
-    query = GetTeamQuery(team_id=team_id)
+    query = GetTeamQuery(id=team_id)
     result = await Mediator.send_async(query)
 
     if is_err(result):

@@ -33,7 +33,7 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
 
     # Test: Get user via handler
     handler = GetUserHandler(uow)
-    query = GetUserQuery(user_id=saved_user.id.to_primitive())
+    query = GetUserQuery(id=saved_user.id.to_primitive())
     result = await handler.handle(query)
 
     assert is_ok(result)
@@ -46,7 +46,7 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
 async def test_get_user_handler_not_found(uow: IUnitOfWork) -> None:
     """Test GetUserHandler returns Err when user is not found."""
     handler = GetUserHandler(uow)
-    query = GetUserQuery(user_id="01ARZ3NDEKTSV4RRFFQ69G5FAV")  # Non-existent ULID
+    query = GetUserQuery(id="01ARZ3NDEKTSV4RRFFQ69G5FAV")  # Non-existent ULID
     result = await handler.handle(query)
 
     assert is_err(result)

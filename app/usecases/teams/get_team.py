@@ -25,8 +25,8 @@ class GetTeamResult:
 class GetTeamQuery(Request[Result[GetTeamResult, UseCaseError]]):
     """Query to get team by ID."""
 
-    def __init__(self, team_id: str) -> None:
-        self.team_id = team_id
+    def __init__(self, id: str) -> None:
+        self.id = id
 
 
 class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseError]]):
@@ -40,7 +40,7 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
         self, request: GetTeamQuery
     ) -> Result[GetTeamResult, UseCaseError]:
         """Get team by ID, returning a DTO within a Result."""
-        team_id_result = TeamId.from_primitive(request.team_id).map_err(
+        team_id_result = TeamId.from_primitive(request.id).map_err(
             lambda _: UseCaseError(
                 type=ErrorType.VALIDATION_ERROR,
                 message="Invalid Team ID format.",
@@ -61,7 +61,6 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
                 return team_result
 
             team = team_result.unwrap()
-            logger.debug("GetTeamHandler: team=%s", team)
             team_dto = TeamDTO(
                 id=team.id.to_primitive(),
                 name=team.name.to_primitive(),
