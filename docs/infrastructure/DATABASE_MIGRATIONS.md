@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 目次
+## 目次
 
 - [概要](#概要)
 - [マイグレーション作成の基本フロー](#マイグレーション作成の基本フロー)
@@ -438,11 +438,11 @@ uv run --frozen ruff check . --fix
 
 マイグレーションメッセージは明確で簡潔に:
 
-- ✅ `"add teams table"`
-- ✅ `"rename user name to display name"`
-- ✅ `"change timestamp columns to datetime type"`
-- ❌ `"update"`
-- ❌ `"fix"`
+- [OK] `"add teams table"`
+- [OK] `"rename user name to display name"`
+- [OK] `"change timestamp columns to datetime type"`
+- [NG] `"update"`
+- [NG] `"fix"`
 
 ---
 

@@ -28,12 +28,11 @@ class MyBot(commands.Bot):
         from injector import Injector
 
         from app import container
-        from app.infrastructure.database import create_db_and_tables, init_db
+        from app.infrastructure.database import init_db
         from app.mediator import Mediator
 
         db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./bot.db")
         init_db(db_url, echo=True)
-        await create_db_and_tables()
 
         # Initialize Mediator with dependency injection container
         injector = Injector([container.configure])
