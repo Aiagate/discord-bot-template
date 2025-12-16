@@ -4,22 +4,23 @@ import pytest
 from injector import Injector
 
 from app import container
+from app.core.result import Ok, Result
 from app.mediator import HandlerNotFoundError, Mediator, Request, RequestHandler
 
 # Initialize Mediator for tests
 Mediator.initialize(Injector([container.configure]))
 
 
-class MyQuery(Request[str]):
+class MyQuery(Request[Result[str, Exception]]):
     pass
 
 
-class MyQueryHandler(RequestHandler[MyQuery, str]):
-    async def handle(self, request: MyQuery) -> str:
-        return "Handled"
+class MyQueryHandler(RequestHandler[MyQuery, Result[str, Exception]]):
+    async def handle(self, request: MyQuery) -> Result[str, Exception]:
+        return Ok("Handled")
 
 
-class AnotherQuery(Request[int]):
+class AnotherQuery(Request[Result[int, Exception]]):
     pass
 
 
@@ -27,7 +28,7 @@ class AnotherQuery(Request[int]):
 async def test_mediator_send_registered_request() -> None:
     """Test that a request with an auto-registered handler can be sent."""
     # The MyQueryHandler should be auto-registered via the metaclass
-    result = await Mediator.send_async(MyQuery())
+    result = await Mediator.send_async(MyQuery()).unwrap()
     assert result == "Handled"
 
 
