@@ -6,7 +6,7 @@
 
 ---
 
-## 📐 アーキテクチャ概要
+## アーキテクチャ概要
 
 このプロジェクトは **クリーンアーキテクチャ（Clean Architecture）** に基づいて設計されています。
 
@@ -58,7 +58,7 @@ Presentation ──▶ Application ──▶ Domain ◀── Infrastructure
 
 ---
 
-## 🏗️ 各レイヤーの詳細
+## 各レイヤーの詳細
 
 ### 1. Domain Layer（ドメイン層）
 
@@ -642,7 +642,7 @@ class UsersCog(commands.Cog):
 
 ---
 
-## 🔄 データフロー
+## データフロー
 
 ### Query（読み取り）のフロー
 
@@ -690,7 +690,7 @@ class UsersCog(commands.Cog):
 
 ---
 
-## 🧪 テスト戦略
+## テスト戦略
 
 ### 1. ユニットテスト
 
@@ -740,7 +740,7 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
 
 ---
 
-## 📦 依存関係管理
+## 依存関係管理
 
 ### プロダクション依存関係
 
@@ -771,7 +771,7 @@ ruff = ">=0.14.6"
 
 ---
 
-## 🚀 拡張方法
+## 拡張方法
 
 ### 新しい集約の追加
 
