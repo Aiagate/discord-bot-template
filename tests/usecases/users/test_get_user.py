@@ -37,9 +37,9 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(query)
 
     assert is_ok(result)
-    assert result.value.user.id == saved_user.id.to_primitive()
-    assert result.value.user.display_name == "Bob"
-    assert result.value.user.email == "bob@example.com"
+    assert result.value.id == saved_user.id.to_primitive()
+    assert result.value.display_name == "Bob"
+    assert result.value.email == "bob@example.com"
 
 
 @pytest.mark.anyio

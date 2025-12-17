@@ -54,12 +54,11 @@ async def get_team(team_id: str) -> TeamResponse:
         raise HTTPException(status_code=404, detail=result.error.message)
 
     team_result = result.unwrap()
-    team_dto = team_result.team
 
     return TeamResponse(
-        id=team_dto.id,
-        name=team_dto.name,
-        version=team_dto.version,
+        id=team_result.id,
+        name=team_result.name,
+        version=team_result.version,
     )
 
 

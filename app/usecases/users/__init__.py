@@ -5,7 +5,6 @@ from app.usecases.users.create_user import (
     CreateUserHandler,
 )
 from app.usecases.users.get_user import GetUserHandler, GetUserQuery, GetUserResult
-from app.usecases.users.user_dto import UserDTO
 
 __all__ = [
     "CreateUserCommand",
@@ -13,5 +12,4 @@ __all__ = [
     "GetUserQuery",
     "GetUserHandler",
     "GetUserResult",
-    "UserDTO",
 ]
