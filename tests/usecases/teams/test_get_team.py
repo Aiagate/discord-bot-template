@@ -34,8 +34,8 @@ async def test_get_team_handler(uow: IUnitOfWork) -> None:
     result = await handler.handle(query)
 
     assert is_ok(result)
-    assert result.value.team.id == saved_team.id.to_primitive()
-    assert result.value.team.name == "Alpha Team"
+    assert result.value.id == saved_team.id.to_primitive()
+    assert result.value.name == "Alpha Team"
 
 
 @pytest.mark.anyio

@@ -34,9 +34,9 @@ class UsersCog(BaseCog, name="Users"):
             .map(
                 lambda value: (
                     f"User Information:\n"
-                    f"ID: {value.user.id}\n"
-                    f"Display Name: {value.user.display_name}\n"
-                    f"Email: {value.user.email}"
+                    f"ID: {value.id}\n"
+                    f"Display Name: {value.display_name}\n"
+                    f"Email: {value.email}"
                 )
             )
             .unwrap()
@@ -60,9 +60,9 @@ class UsersCog(BaseCog, name="Users"):
             .map(
                 lambda value: (
                     f"User Created:\n"
-                    f"ID: {value.user.id}\n"
-                    f"Display Name: {value.user.display_name}\n"
-                    f"Email: {value.user.email}"
+                    f"ID: {value.id}\n"
+                    f"Display Name: {value.display_name}\n"
+                    f"Email: {value.email}"
                 )
             )
             .unwrap()

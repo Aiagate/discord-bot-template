@@ -14,17 +14,17 @@ from app.usecases.result import ErrorType, UseCaseError
 logger = logging.getLogger(__name__)
 
 
-class CreateUserCommand(Request[Result["CreateUserResult", UseCaseError]]):
+class CreateUserResult:
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+
+class CreateUserCommand(Request[Result[CreateUserResult, UseCaseError]]):
     """Command to create new user."""
 
     def __init__(self, display_name: str, email: str) -> None:
         self.display_name = display_name
         self.email = email
-
-
-class CreateUserResult:
-    def __init__(self, id: str) -> None:
-        self.id = id
 
 
 class CreateUserHandler(

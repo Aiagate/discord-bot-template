@@ -33,9 +33,7 @@ class TeamsCog(BaseCog, name="Teams"):
         message = await (
             Mediator.send_async(query)
             .map(  # type: ignore[arg-type, return-value]  # pyright: ignore[reportUnknownLambdaType]
-                lambda value: (
-                    f"Team Information:\nID: {value.team.id}\nName: {value.team.name}"
-                )
+                lambda value: (f"Team Information:\nID: {value.id}\nName: {value.name}")
             )
             .unwrap()
         )
@@ -55,9 +53,7 @@ class TeamsCog(BaseCog, name="Teams"):
                 lambda result: Mediator.send_async(GetTeamQuery(id=result.id))
             )
             .map(  # type: ignore[arg-type, return-value]
-                lambda value: (
-                    f"Team Created:\nID: {value.team.id}\nName: {value.team.name}"
-                )
+                lambda value: (f"Team Created:\nID: {value.id}\nName: {value.name}")
             )
             .unwrap()
         )
@@ -81,9 +77,9 @@ class TeamsCog(BaseCog, name="Teams"):
             .map(  # type: ignore[arg-type, return-value]
                 lambda value: (
                     f"Team Updated Successfully:\n"
-                    f"ID: {value.team.id}\n"
-                    f"Name: {value.team.name}\n"
-                    f"Version: {value.team.version}"
+                    f"ID: {value.id}\n"
+                    f"Name: {value.name}\n"
+                    f"Version: {value.version}"
                 )
             )
             .unwrap()

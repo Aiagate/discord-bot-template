@@ -1,6 +1,7 @@
 """Get Team use case."""
 
 import logging
+from dataclasses import dataclass
 
 from injector import inject
 
@@ -10,16 +11,17 @@ from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import TeamId
 from app.mediator import Request, RequestHandler
 from app.usecases.result import ErrorType, UseCaseError
-from app.usecases.teams.team_dto import TeamDTO
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
 class GetTeamResult:
     """Result object for GetTeam query."""
 
-    def __init__(self, team: TeamDTO) -> None:
-        self.team = team
+    id: str
+    name: str
+    version: int
 
 
 class GetTeamQuery(Request[Result[GetTeamResult, UseCaseError]]):
@@ -39,7 +41,7 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
     async def handle(
         self, request: GetTeamQuery
     ) -> Result[GetTeamResult, UseCaseError]:
-        """Get team by ID, returning a DTO within a Result."""
+        """Get team by ID, returning a flattened result."""
         team_id_result = TeamId.from_primitive(request.id).map_err(
             lambda _: UseCaseError(
                 type=ErrorType.VALIDATION_ERROR,
@@ -61,9 +63,10 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
                 return team_result
 
             team = team_result.unwrap()
-            team_dto = TeamDTO(
-                id=team.id.to_primitive(),
-                name=team.name.to_primitive(),
-                version=team.version.to_primitive(),
+            return Ok(
+                GetTeamResult(
+                    id=team.id.to_primitive(),
+                    name=team.name.to_primitive(),
+                    version=team.version.to_primitive(),
+                )
             )
-            return Ok(GetTeamResult(team_dto))

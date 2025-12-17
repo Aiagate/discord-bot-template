@@ -48,10 +48,9 @@ async def get_user(user_id: str) -> UserResponse:
         raise HTTPException(status_code=404, detail=result.error.message)
 
     user_result = result.unwrap()
-    user_dto = user_result.user
 
     return UserResponse(
-        id=user_dto.id,
-        display_name=user_dto.display_name,
-        email=user_dto.email,
+        id=user_result.id,
+        display_name=user_result.display_name,
+        email=user_result.email,
     )

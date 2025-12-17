@@ -37,17 +37,17 @@ def _map_update_error(repo_error: RepositoryError, team_id: str) -> UseCaseError
     return UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
 
 
-class UpdateTeamCommand(Request[Result["UpdateTeamResult", UseCaseError]]):
+class UpdateTeamResult:
+    def __init__(self, id: str) -> None:
+        self.id = id
+
+
+class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseError]]):
     """Command to update team name."""
 
     def __init__(self, team_id: str, new_name: str) -> None:
         self.team_id = team_id
         self.new_name = new_name
-
-
-class UpdateTeamResult:
-    def __init__(self, id: str) -> None:
-        self.id = id
 
 
 class UpdateTeamHandler(
