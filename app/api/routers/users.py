@@ -34,7 +34,7 @@ async def create_user(request: CreateUserRequest) -> CreateUserResponse:
     if is_err(result):
         raise HTTPException(status_code=400, detail=result.error.message)
 
-    user_id = result.unwrap()
+    user_id = result.unwrap().id
     return CreateUserResponse(id=user_id)
 
 

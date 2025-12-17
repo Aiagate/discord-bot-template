@@ -40,7 +40,7 @@ async def create_team(request: CreateTeamRequest) -> CreateTeamResponse:
         # In a real app, you would map ErrorType to status codes
         raise HTTPException(status_code=400, detail=result.error.message)
 
-    team_id = result.unwrap()
+    team_id = result.unwrap().id
     return CreateTeamResponse(id=team_id)
 
 
@@ -72,5 +72,5 @@ async def update_team(team_id: str, request: UpdateTeamRequest) -> CreateTeamRes
     if is_err(result):
         raise HTTPException(status_code=400, detail=result.error.message)
 
-    updated_team_id = result.unwrap()
+    updated_team_id = result.unwrap().id
     return CreateTeamResponse(id=updated_team_id)

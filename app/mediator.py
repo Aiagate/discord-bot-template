@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 
 from injector import Injector
 
-from app.core.result import ResultAwaitable
+from app.core.result import Result, ResultAwaitable
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,9 @@ class Mediator:
         cls._injector = injector
 
     @classmethod
-    def send_async[R](cls, request: Request[R]) -> ResultAwaitable:  # type: ignore[type-arg]
+    def send_async[T, E: Exception](
+        cls, request: Request[Result[T, E]]
+    ) -> ResultAwaitable[T, E]:
         """
         Send a request to its handler.
 
@@ -77,7 +79,7 @@ class Mediator:
             ResultAwaitable wrapping the handler result
         """
 
-        async def execute() -> R:
+        async def execute() -> Result[T, E]:
             logger.debug("Mediator.send_async: %s", request)
             if cls._injector is None:
                 raise RuntimeError(
@@ -90,7 +92,7 @@ class Mediator:
             handler = cls._injector.get(handler_provider)
             return await handler.handle(request)
 
-        return ResultAwaitable(execute())  # type: ignore[arg-type]
+        return ResultAwaitable(execute())
 
     @classmethod
     def register(cls, request_type: type[Any], handler_type: type[Any]) -> None:

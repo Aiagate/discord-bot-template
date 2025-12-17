@@ -14,7 +14,7 @@ from app.usecases.result import ErrorType, UseCaseError
 logger = logging.getLogger(__name__)
 
 
-class CreateTeamCommand(Request[Result[str, UseCaseError]]):
+class CreateTeamCommand(Request[Result["CreateTeamResult", UseCaseError]]):
     """Command to create new team."""
 
     def __init__(self, name: str) -> None:
