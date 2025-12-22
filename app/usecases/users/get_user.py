@@ -24,11 +24,11 @@ class GetUserResult:
     email: str
 
 
+@dataclass(frozen=True)
 class GetUserQuery(Request[Result[GetUserResult, UseCaseError]]):
     """Query to get user by ID."""
 
-    def __init__(self, id: str) -> None:
-        self.user_id = id
+    user_id: str
 
 
 class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseError]]):

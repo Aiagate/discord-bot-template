@@ -24,11 +24,11 @@ class GetTeamResult:
     version: int
 
 
+@dataclass(frozen=True)
 class GetTeamQuery(Request[Result[GetTeamResult, UseCaseError]]):
     """Query to get team by ID."""
 
-    def __init__(self, id: str) -> None:
-        self.id = id
+    id: str
 
 
 class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseError]]):
