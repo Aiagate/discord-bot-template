@@ -1,6 +1,7 @@
 """Create Team use case."""
 
 import logging
+from dataclasses import dataclass
 
 from injector import inject
 
@@ -14,16 +15,16 @@ from app.usecases.result import ErrorType, UseCaseError
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
 class CreateTeamResult:
-    def __init__(self, id: str) -> None:
-        self.id = id
+    id: str
 
 
+@dataclass(frozen=True)
 class CreateTeamCommand(Request[Result[CreateTeamResult, UseCaseError]]):
     """Command to create new team."""
 
-    def __init__(self, name: str) -> None:
-        self.name = name
+    name: str
 
 
 class CreateTeamHandler(

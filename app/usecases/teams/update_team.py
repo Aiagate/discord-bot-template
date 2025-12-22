@@ -1,6 +1,7 @@
 """Update Team use case."""
 
 import logging
+from dataclasses import dataclass
 
 from injector import inject
 
@@ -37,17 +38,17 @@ def _map_update_error(repo_error: RepositoryError, team_id: str) -> UseCaseError
     return UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
 
 
+@dataclass(frozen=True)
 class UpdateTeamResult:
-    def __init__(self, id: str) -> None:
-        self.id = id
+    id: str
 
 
+@dataclass(frozen=True)
 class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseError]]):
     """Command to update team name."""
 
-    def __init__(self, team_id: str, new_name: str) -> None:
-        self.team_id = team_id
-        self.new_name = new_name
+    team_id: str
+    new_name: str
 
 
 class UpdateTeamHandler(

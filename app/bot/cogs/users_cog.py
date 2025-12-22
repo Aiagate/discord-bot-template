@@ -27,7 +27,7 @@ class UsersCog(BaseCog, name="Users"):
         id: str,
     ) -> None:
         """Get user by ID. Usage: !users get <user_id>"""
-        query = GetUserQuery(id=id)
+        query = GetUserQuery(user_id=id)
 
         message = await (
             Mediator.send_async(query)
@@ -56,7 +56,9 @@ class UsersCog(BaseCog, name="Users"):
             Mediator.send_async(
                 CreateUserCommand(display_name=display_name, email=email)
             )
-            .and_then(lambda result: Mediator.send_async(GetUserQuery(result.id)))
+            .and_then(
+                lambda result: Mediator.send_async(GetUserQuery(user_id=result.id))
+            )
             .map(
                 lambda value: (
                     f"User Created:\n"
