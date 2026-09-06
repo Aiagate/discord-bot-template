@@ -71,6 +71,59 @@ def test_team_name_with_trailing_whitespace_returns_err() -> None:
     assert "cannot have leading or trailing whitespace" in str(result.error)
 
 
+@pytest.mark.parametrize(
+    "value, message",
+    [
+        ("", "cannot be empty"),
+        ("  Alpha Team", "leading or trailing whitespace"),
+        ("Alpha Team  ", "leading or trailing whitespace"),
+        ("x" * (TeamName.MAX_LENGTH + 1), "must not exceed"),
+    ],
+)
+def test_team_name_constructor_rejects_invalid_values(
+    value: str,
+    message: str,
+) -> None:
+    """Test direct construction enforces team name invariants."""
+    with pytest.raises(ValueError, match=message):
+        TeamName(_value=value)
+
+
+@pytest.mark.parametrize("value", ["A", "x" * TeamName.MAX_LENGTH])
+def test_team_name_constructor_accepts_boundary_values(value: str) -> None:
+    """Test both construction paths accept the length boundaries."""
+    team_name = TeamName(_value=value)
+    result = TeamName.from_primitive(value)
+
+    assert team_name.to_primitive() == value
+    assert result.expect("TeamName.from_primitive should accept boundary") == team_name
+
+
+@pytest.mark.parametrize("value", [None, 123])
+def test_team_name_rejects_non_string_values(value: object) -> None:
+    """Test both construction paths reject non-string values."""
+    with pytest.raises(TypeError, match="must be a string"):
+        TeamName(_value=value)  # type: ignore[arg-type]
+
+    result = TeamName.from_primitive(value)  # type: ignore[arg-type]
+    assert is_err(result)
+    assert isinstance(result.error, TypeError)
+
+
+def test_team_name_dataclass_replace_revalidates_value() -> None:
+    """Test dataclasses.replace cannot create an invalid team name."""
+    team_name = TeamName(_value="Alpha Team")
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        dataclasses.replace(team_name, _value="")
+
+
+def test_team_name_length_limits_are_class_constants() -> None:
+    """Test validation limits cannot be overridden per instance."""
+    with pytest.raises(TypeError):
+        TeamName(_value="Alpha Team", MAX_LENGTH=1)  # type: ignore[call-arg]
+
+
 def test_team_name_repr() -> None:
     """Test team name representation."""
     team_name = TeamName.from_primitive("Alpha Team").expect(

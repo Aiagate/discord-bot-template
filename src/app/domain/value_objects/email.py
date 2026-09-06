@@ -27,6 +27,19 @@ class Email:
         r"[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}$"
     )
 
+    def __post_init__(self) -> None:
+        """Validate and normalize the email address on construction."""
+        if not isinstance(  # type: ignore[reportUnnecessaryIsInstance]
+            self._value, str
+        ):
+            raise TypeError("Email must be a string.")
+        normalized = self._value.strip()
+        if not normalized:
+            raise ValueError("Email cannot be empty.")
+        if not self.EMAIL_REGEX.match(normalized):
+            raise ValueError(f"Invalid email format: {normalized}")
+        object.__setattr__(self, "_value", normalized)
+
     def to_primitive(self) -> str:
         """Convert to primitive string type for persistence.
 
@@ -43,19 +56,12 @@ class Email:
             value: String representation of email from database
 
         Returns:
-            Email instance
-
-        Raises:
-            ValueError: If the string is not a valid email format
+            Result containing Email or a validation error.
         """
-        if not value:
-            return Err(ValueError("Email cannot be empty."))
-        normalized = value.strip()
-        if not normalized:
-            return Err(ValueError("Email cannot be empty."))
-        if not cls.EMAIL_REGEX.match(normalized):
-            return Err(ValueError(f"Invalid email format: {normalized}"))
-        return Ok(cls(_value=normalized))
+        try:
+            return Ok(cls(_value=value))
+        except (TypeError, ValueError) as error:
+            return Err(error)
 
     def __str__(self) -> str:
         """String representation."""
