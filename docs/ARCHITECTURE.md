@@ -148,6 +148,10 @@ class IRepositoryWithId[T, K](IRepository[T], ABC):
 - 実装はインフラ層が担当（依存性逆転）
 - Result型で型安全なエラーハンドリング
 
+`IRepository` と `RepositoryError` はDomainの汎用契約である。トランザクションの
+ライフサイクルを表す `IUnitOfWork` と読み取り専用の `IChatHistoryQuery` は、
+Domainから独立した `src/app/contracts/ports/` のApplicationポートである。
+
 **設計判断: Protocol から ABC への移行**:
 
 当初は `Protocol` ベースの設計を採用していましたが、DI（依存性注入）による
