@@ -487,7 +487,7 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
         if orm_instance is None:
             return Err(RepositoryError(type=RepositoryErrorType.NOT_FOUND, ...))
 
-        # ORM → Domain 自動変換
+        # 登録済みマッパーで ORM → Domain を変換
         return Ok(ORMMappingRegistry.from_orm(orm_instance))
 ```
 
@@ -505,15 +505,18 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
 `src/app/infrastructure/orm_mapping.py`:
 
 ```python
-# registry_orm_mapping(DomainClass, ORMClass) でマッピングを登録
+register_orm_mapping(
+    DomainClass, ORMClass, to_orm=domain_to_orm, from_orm=domain_from_orm
+)
 # from_orm(orm_instance) で登録済みの明示マッパーを使ってORMからドメインへ変換
 # to_orm(domain_instance) でドメインからORMへ変換
 ```
 
 User、Team、TeamMembership、ChatMessageは、それぞれのドメイン語彙と復元APIを
 明示的に指定します。これにより、property名やprivate fieldの追加が暗黙にDB列へ
-影響することを防ぎ、versionと監査日時も復元時に保持します。汎用レジストリの
-自動変換は、明示マッパーを持たない単純な補助型に限って利用します。
+影響することを防ぎ、versionと監査日時も復元時に保持します。
+登録には双方向の変換関数が必須です。未登録の型の変換はエラーとなり、
+フィールド名や型注釈からの自動変換は行いません。
 
 **利点**:
 
@@ -816,18 +819,25 @@ class GuildORM(SQLModel, table=True):
     name: str
 ```
 
-1. **マッピングを登録**
+1. **明示的マッパーを作成して登録**
+
+`src/app/infrastructure/mappings/guild.py` に `guild_to_orm` と
+`guild_from_orm` を実装します。既存の集約別マッパーと同様に、
+保存する列とドメインの復元処理を明示します。
 
 ```python
 # src/app/infrastructure/orm_registry.py
 from app.domain.aggregates.guild import Guild
+from app.infrastructure.mappings.guild import guild_from_orm, guild_to_orm
+from app.infrastructure.orm_mapping import register_orm_mapping
 from app.infrastructure.orm_models.guild_orm import GuildORM
 
 def init_orm_mappings() -> None:
     """Initialize all ORM mappings."""
-    register_orm_mapping(User, UserORM)
-    register_orm_mapping(Team, TeamORM)
-    register_orm_mapping(Guild, GuildORM) # ここに追加
+    # 既存の登録に追加
+    register_orm_mapping(
+        Guild, GuildORM, to_orm=guild_to_orm, from_orm=guild_from_orm
+    )
 ```
 
 `init_orm_mappings` はアプリ起動時に `src/app/container.py` から自動で呼び出されるため、ここの追加だけでマッピングは完了します。
