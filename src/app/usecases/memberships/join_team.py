@@ -86,8 +86,6 @@ class JoinTeamHandler(
                     UseCaseError(type=ErrorType.NOT_FOUND, message="User not found")
                 )
 
-            # Check if already a member (Optional logic for now, could be handled by unique constraints)
-            # For simplicity, we create the aggregate and let repository handle conflicts if indexed
             membership = TeamMembership.join(team_id=team_id, user_id=user_id)
 
             add_result = await membership_repo.add(membership)

@@ -8,7 +8,10 @@ from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
 from app.contracts.ports import IUnitOfWork
-from app.domain.aggregates.team_membership import TeamMembership
+from app.domain.aggregates.team_membership import (
+    MembershipTransitionError,
+    TeamMembership,
+)
 from app.domain.value_objects import MembershipId, MembershipRole
 from app.usecases.result import ErrorType, UseCaseError
 
@@ -78,7 +81,15 @@ class ChangeRoleHandler(
 
             membership = membership_result.unwrap()
 
-            membership.change_role(new_role)
+            try:
+                membership.change_role(new_role)
+            except MembershipTransitionError as error:
+                return Err(
+                    UseCaseError(
+                        type=ErrorType.VALIDATION_ERROR,
+                        message=str(error),
+                    )
+                )
 
             update_result = await membership_repo.update(membership)
             if is_err(update_result):

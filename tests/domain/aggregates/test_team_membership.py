@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.domain.aggregates.team_membership import TeamMembership
+from app.domain.aggregates.team_membership import (
+    MembershipTransitionError,
+    TeamMembership,
+)
 from app.domain.value_objects import (
     MembershipRole,
     MembershipStatus,
@@ -52,6 +55,33 @@ def test_team_membership_change_role() -> None:
     assert membership.role == MembershipRole.ADMIN
 
 
+def test_team_membership_change_role_pending() -> None:
+    """Test changing the role of a pending member."""
+    team_id = TeamId.generate().expect("Success")
+    user_id = UserId.generate().expect("Success")
+    membership = TeamMembership.request_join(team_id=team_id, user_id=user_id)
+
+    membership.change_role(MembershipRole.ADMIN)
+
+    assert membership.role == MembershipRole.ADMIN
+
+
+def test_team_membership_cannot_change_role_after_leaving() -> None:
+    """A LEAVED membership cannot change its role."""
+    team_id = TeamId.generate().expect("Success")
+    user_id = UserId.generate().expect("Success")
+    membership = TeamMembership.join(team_id=team_id, user_id=user_id)
+    membership.leave()
+
+    with pytest.raises(
+        MembershipTransitionError,
+        match="LEAVED",
+    ):
+        membership.change_role(MembershipRole.ADMIN)
+
+    assert membership.role == MembershipRole.MEMBER
+
+
 def test_team_membership_activate() -> None:
     """Test activating a pending membership."""
     team_id = TeamId.generate().expect("Success")
@@ -80,6 +110,33 @@ def test_team_membership_leave() -> None:
     membership = TeamMembership.join(team_id=team_id, user_id=user_id)
 
     membership.leave()
+
+    assert membership.status == MembershipStatus.LEAVED
+
+
+def test_team_membership_leave_pending() -> None:
+    """A pending membership can transition to LEAVED."""
+    team_id = TeamId.generate().expect("Success")
+    user_id = UserId.generate().expect("Success")
+    membership = TeamMembership.request_join(team_id=team_id, user_id=user_id)
+
+    membership.leave()
+
+    assert membership.status == MembershipStatus.LEAVED
+
+
+def test_team_membership_cannot_leave_twice() -> None:
+    """A LEAVED membership cannot be transitioned again."""
+    team_id = TeamId.generate().expect("Success")
+    user_id = UserId.generate().expect("Success")
+    membership = TeamMembership.join(team_id=team_id, user_id=user_id)
+    membership.leave()
+
+    with pytest.raises(
+        MembershipTransitionError,
+        match="LEAVED",
+    ):
+        membership.leave()
 
     assert membership.status == MembershipStatus.LEAVED
 

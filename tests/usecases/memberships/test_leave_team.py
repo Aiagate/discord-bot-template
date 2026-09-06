@@ -44,11 +44,10 @@ async def test_leave_team_not_found(uow: IUnitOfWork) -> None:
 
 
 @pytest.mark.anyio
-async def test_leave_team_already_inactive(
+async def test_leave_team_already_leaved(
     uow: IUnitOfWork, event_bus: AsyncMock
 ) -> None:
-    """Test leaving already inactive membership."""
-    # Setup: Create inactive membership
+    """Test that leaving a LEAVED membership returns a validation error."""
     team_handler = CreateTeamHandler(uow)
     team_id = (await team_handler.handle(CreateTeamCommand(name="Team A"))).unwrap().id
 
@@ -72,7 +71,10 @@ async def test_leave_team_already_inactive(
     )
 
     leave_handler = LeaveTeamHandler(uow)
-    await leave_handler.handle(LeaveTeamCommand(membership_id=membership_id))
+    first_result = await leave_handler.handle(
+        LeaveTeamCommand(membership_id=membership_id)
+    )
+    assert not is_err(first_result)
 
     # Execute again
     result = await leave_handler.handle(LeaveTeamCommand(membership_id=membership_id))
@@ -80,4 +82,4 @@ async def test_leave_team_already_inactive(
     # Assert
     assert is_err(result)
     assert result.error.type == ErrorType.VALIDATION_ERROR
-    assert result.error.message == "User has already leaved the team"
+    assert result.error.message == "Membership is already in LEAVED status"
