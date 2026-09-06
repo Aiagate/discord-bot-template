@@ -1,6 +1,7 @@
 """DisplayName value object with validation."""
 
 from dataclasses import dataclass
+from typing import ClassVar
 
 from flow_res import Err, Ok, Result
 
@@ -18,8 +19,27 @@ class DisplayName:
     _value: str
 
     # ディスプレイネームの最小・最大文字数
-    MIN_LENGTH: int = 1
-    MAX_LENGTH: int = 100
+    MIN_LENGTH: ClassVar[int] = 1
+    MAX_LENGTH: ClassVar[int] = 100
+
+    def __post_init__(self) -> None:
+        """Validate the display name when the value object is constructed."""
+        if not isinstance(  # type: ignore[reportUnnecessaryIsInstance]
+            self._value, str
+        ):
+            raise TypeError("Display name must be a string.")
+        if not self._value:
+            raise ValueError("Display name cannot be empty.")
+        if len(self._value) < self.MIN_LENGTH:
+            raise ValueError(
+                f"Display name must be at least {self.MIN_LENGTH} characters long."
+            )
+        if len(self._value) > self.MAX_LENGTH:
+            raise ValueError(
+                f"Display name must not exceed {self.MAX_LENGTH} characters."
+            )
+        if self._value != self._value.strip():
+            raise ValueError("Display name cannot have leading or trailing whitespace.")
 
     def to_primitive(self) -> str:
         """Convert to primitive string type for persistence.
@@ -37,28 +57,12 @@ class DisplayName:
             value: String representation of display name from database
 
         Returns:
-            DisplayName instance
-
-        Raises:
-            ValueError: If the string is not a valid display name
+            Result containing DisplayName or a validation error.
         """
-        if not value:
-            return Err(ValueError("Display name cannot be empty."))
-        if len(value) < cls.MIN_LENGTH:
-            return Err(
-                ValueError(
-                    f"Display name must be at least {cls.MIN_LENGTH} characters long."
-                )
-            )
-        if len(value) > cls.MAX_LENGTH:
-            return Err(
-                ValueError(f"Display name must not exceed {cls.MAX_LENGTH} characters.")
-            )
-        if value != value.strip():
-            return Err(
-                ValueError("Display name cannot have leading or trailing whitespace.")
-            )
-        return Ok(cls(_value=value))
+        try:
+            return Ok(cls(_value=value))
+        except (TypeError, ValueError) as error:
+            return Err(error)
 
     def __str__(self) -> str:
         """String representation."""
