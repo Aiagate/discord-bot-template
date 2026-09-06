@@ -3,10 +3,10 @@
 import injector
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.contracts.ports.event_bus import IEventBus
-from app.domain.repositories import IUnitOfWork
+from app.contracts.ports import IChatHistoryQuery, IEventBus, IUnitOfWork
 from app.infrastructure.messaging.in_memory_event_bus import InMemoryEventBus
 from app.infrastructure.orm_registry import init_orm_mappings
+from app.infrastructure.queries.chat_history_query import SQLAlchemyChatHistoryQuery
 from app.infrastructure.unit_of_work import SQLAlchemyUnitOfWork
 
 
@@ -29,6 +29,14 @@ class DatabaseModule(injector.Module):
     ) -> IUnitOfWork:
         """Provide Unit of Work implementation for transaction management."""
         return SQLAlchemyUnitOfWork(session_factory)
+
+    @injector.provider
+    def provide_chat_history_query(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+    ) -> IChatHistoryQuery:
+        """Provide an isolated read query with factory-owned sessions."""
+        return SQLAlchemyChatHistoryQuery(session_factory)
 
 
 class MessagingModule(injector.Module):

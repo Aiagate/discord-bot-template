@@ -1,11 +1,13 @@
 """Tests for Create User use case."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from flow_res import Err, is_err, is_ok
 
-from app.domain.repositories import IUnitOfWork, RepositoryError, RepositoryErrorType
+from app.contracts.ports import IUnitOfWork
+from app.domain.repositories import RepositoryError, RepositoryErrorType
 from app.usecases.result import ErrorType
 from app.usecases.users.create_user import (
     CreateUserCommand,
@@ -71,3 +73,37 @@ async def test_create_user_handler_repository_error(event_bus: AsyncMock) -> Non
     assert is_err(result)
     assert result.error.type == ErrorType.UNEXPECTED
     assert "Database connection failed" in result.error.message
+
+
+@pytest.mark.anyio
+async def test_create_user_succeeds_when_event_publication_fails(
+    uow: IUnitOfWork,
+    event_bus: AsyncMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A committed user is successful even when notification is unavailable."""
+    event_bus.publish.side_effect = RuntimeError("event bus unavailable")
+    handler = CreateUserHandler(uow, event_bus)
+
+    result = await handler.handle(
+        CreateUserCommand(display_name="Alice", email="failure@example.com")
+    )
+
+    assert is_ok(result)
+    assert "Failed to publish user.created" in caplog.text
+    event_bus.publish.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_create_user_does_not_swallow_cancellation(
+    uow: IUnitOfWork,
+    event_bus: AsyncMock,
+) -> None:
+    """Cancellation during publication propagates to the caller."""
+    event_bus.publish.side_effect = asyncio.CancelledError()
+    handler = CreateUserHandler(uow, event_bus)
+
+    with pytest.raises(asyncio.CancelledError):
+        await handler.handle(
+            CreateUserCommand(display_name="Alice", email="cancel@example.com")
+        )

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from flow_res import is_err, is_ok
 
-from app.domain.repositories import IUnitOfWork
+from app.contracts.ports import IUnitOfWork
 from app.usecases.memberships.approve_join_request import (
     ApproveJoinRequestCommand,
     ApproveJoinRequestHandler,

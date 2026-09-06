@@ -11,6 +11,7 @@ class ErrorType(Enum):
     VALIDATION_ERROR = auto()
     UNEXPECTED = auto()
     CONCURRENCY_CONFLICT = auto()
+    CONFLICT = auto()
 
 
 @dataclass(frozen=True)

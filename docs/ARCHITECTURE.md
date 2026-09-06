@@ -1,6 +1,6 @@
 # アーキテクチャ設計ドキュメント
 
-最終更新日: 2025-11-28
+最終更新日: 2026-09-06
 
 このドキュメントは、Discord Bot テンプレートのアーキテクチャ設計と実装パターンを詳細に説明します。
 
@@ -9,6 +9,10 @@
 ## アーキテクチャ概要
 
 このプロジェクトは **クリーンアーキテクチャ（Clean Architecture）** に基づいて設計されています。
+
+現行コードで確定しているドメイン境界と用語は
+[現行のドメイン境界と用語集](./domain/BOUNDARIES_AND_GLOSSARY.md) にまとめています。
+このテンプレートでは、未確定のコアドメインやサービス分割を仮定しません。
 
 ### レイヤー構造
 
@@ -27,7 +31,10 @@
 │  Domain Layer                               │  ビジネスルール
 │  (Aggregates, Entities, Value Objects)      │  - 純粋なPythonオブジェクト
 │  - src/app/domain/aggregates/               │  - フレームワーク非依存
-│  - src/app/domain/repositories/             │  - ビジネスロジックの検証
+│  - src/app/domain/repositories/             │  - 汎用Repository契約
+├─────────────────────────────────────────────┤
+│  Contracts / Ports                          │  アプリケーション境界
+│  - src/app/contracts/ports/                 │  - UoW・読み取りQuery・イベント契約
 ├─────────────────────────────────────────────┤
 │  Infrastructure Layer                       │  技術的詳細
 │  (Database, ORM, External Services)         │  - データベースアクセス
@@ -54,6 +61,8 @@ Presentation ──▶ Application ──▶ Domain ◀── Infrastructure
 - 上位層は下位層に依存可能
 - **下位層は上位層に依存してはならない**
 - **ドメイン層は最も独立しており、他のどの層にも依存しない**
+- `IUnitOfWork` と `IChatHistoryQuery` は `contracts/ports` に置き、Domainから参照しない
+- チャット履歴QueryはUnit of Workに含めず、呼び出しごとに読み取りセッションを閉じる
 - インフラ層はドメイン層のインターフェースに依存（依存性逆転）
 
 ---
@@ -138,6 +147,10 @@ class IRepositoryWithId[T, K](IRepository[T], ABC):
 - ドメイン層でインターフェースを定義
 - 実装はインフラ層が担当（依存性逆転）
 - Result型で型安全なエラーハンドリング
+
+`IRepository` と `RepositoryError` はDomainの汎用契約である。トランザクションの
+ライフサイクルを表す `IUnitOfWork` と読み取り専用の `IChatHistoryQuery` は、
+Domainから独立した `src/app/contracts/ports/` のApplicationポートである。
 
 **設計判断: Protocol から ABC への移行**:
 
@@ -486,7 +499,8 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
 
 ##### 3.3 ORM Mapping Registry
 
-ドメイン集約とORMモデル間の変換は、`ORMMappingRegistry` によって一元管理されます。
+ドメイン集約とORMモデル間の変換は、Infrastructureの明示的なマッパーによって行い、
+`ORMMappingRegistry` は型ごとのマッパーを登録・検索します。
 
 `src/app/infrastructure/orm_mapping.py`:
 
@@ -496,12 +510,15 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
 # to_orm(domain_instance) でドメインからORMへ変換
 ```
 
-このレジストリは、リフレクションと型ヒントを利用して、`IValueObject` を含むドメイン集約とORMモデル間の変換を自動的に行います。これにより、変換ロジックを都度記述する必要がなくなり、保守性が大幅に向上します。
+User、Team、TeamMembership、ChatMessageは、それぞれのドメイン語彙と復元APIを
+明示的に指定します。これにより、property名やprivate fieldの追加が暗黙にDB列へ
+影響することを防ぎ、versionと監査日時も復元時に保持します。汎用レジストリの
+自動変換は、明示マッパーを持たない単純な補助型に限って利用します。
 
 **利点**:
 
-- **型安全**: 型アノテーションベースで自動変換
-- **保守性向上**: 新しいValue Objectを追加しても変換コード不要
+- **型安全**: 集約ごとの復元APIとValue Object変換を明示
+- **保守性向上**: 永続化列の変更を対応するマッパーに閉じ込める
 - **依存性逆転**: ドメイン層がインフラ層に依存しない
 - **DRY原則**: 変換ロジックの重複を排除
 - **一元管理**: 全てのマッピングを `orm_registry.py` で集中管理
@@ -537,7 +554,11 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
 
 - **トランザクション境界の明確化**
 - リポジトリのキャッシュ（同一トランザクション内で再利用）
-- 自動コミット/ロールバック（コンテキストマネージャー）
+- 例外時のロールバック（コンテキストマネージャー）。成功時のコミットは各ユースケースが明示する
+
+チャット履歴の読み取りは `IChatHistoryQuery` をDIで取得し、SQLAlchemy実装が
+session factoryから呼び出し単位のセッションを作成・終了します。Unit of Workの
+repositoryキャッシュやトランザクション境界とは独立しています。
 
 ##### 3.5 Dependency Injection Container
 
@@ -734,7 +755,7 @@ async def test_get_user_handler(uow: IUnitOfWork) -> None:
 
 **特徴**:
 
-- テストには `@pytest.mark.asyncio` を使用
+- 非同期テストには `@pytest.mark.anyio` を使用
 - データベースを含む
 - トランザクション動作の検証
 

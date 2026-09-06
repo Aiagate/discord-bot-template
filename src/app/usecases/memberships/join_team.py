@@ -7,10 +7,11 @@ from flow_med import Request, RequestHandler
 from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
+from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.team import Team
 from app.domain.aggregates.team_membership import TeamMembership
 from app.domain.aggregates.user import User
-from app.domain.repositories import IUnitOfWork
+from app.domain.repositories import RepositoryErrorType
 from app.domain.value_objects import TeamId, UserId
 from app.usecases.result import ErrorType, UseCaseError
 
@@ -91,6 +92,16 @@ class JoinTeamHandler(
 
             add_result = await membership_repo.add(membership)
             if is_err(add_result):
+                if add_result.error.type == RepositoryErrorType.ALREADY_EXISTS:
+                    return Err(
+                        UseCaseError(
+                            type=ErrorType.CONFLICT,
+                            message=(
+                                "User already has a PENDING or ACTIVE membership "
+                                "for this team"
+                            ),
+                        )
+                    )
                 return Err(
                     UseCaseError(
                         type=ErrorType.UNEXPECTED, message=add_result.error.message

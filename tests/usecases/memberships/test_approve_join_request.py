@@ -6,7 +6,7 @@ import pytest
 from flow_res import is_err
 from ulid import ULID
 
-from app.domain.repositories import IUnitOfWork
+from app.contracts.ports import IUnitOfWork
 from app.usecases.memberships.approve_join_request import (
     ApproveJoinRequestCommand,
     ApproveJoinRequestHandler,

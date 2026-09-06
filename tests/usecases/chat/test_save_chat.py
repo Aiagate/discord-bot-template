@@ -1,48 +1,46 @@
-"""Tests for save chat use case."""
+"""Tests for the Discord ChatMessage save use case."""
+
+from datetime import UTC, datetime
 
 import pytest
 from flow_res import is_err
 
-from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects.chat_type import ChatType
+from app.contracts.ports import IChatHistoryQuery, IUnitOfWork
+from app.domain.value_objects import DiscordConversationScope
 from app.usecases.chat.save_discord_chat import (
-    SaveChatHandler,
     SaveDiscordChatCommand,
+    SaveDiscordChatHandler,
 )
 
 
 @pytest.mark.anyio
 async def test_save_chat_persists_discord_message(
     uow: IUnitOfWork,
+    chat_history_query: IChatHistoryQuery,
 ) -> None:
-    """Test that incoming DM messages are persisted."""
-    handler = SaveChatHandler(uow)
+    """Incoming Discord messages retain external sender and scope."""
+    handler = SaveDiscordChatHandler(uow)
 
     result = await handler.handle(
         SaveDiscordChatCommand(
-            user_id="u1",
-            guild_id="DM",
-            channel_id="123",
+            external_sender_id="discord-user-1",
+            guild_id="guild-1",
+            channel_id="channel-1",
             content="hello",
+            occurred_at=datetime(2026, 9, 5, 9, 0, tzinfo=UTC),
         )
     )
 
     assert not is_err(result)
     assert result.value.id
-    async with uow:
-        raw_query = uow.GetRawChatLogQuery()
-        raw_history = await raw_query.get_raw_chat_logs(
-            "u1",
-            ChatType.DISCORD,
-            limit=10,
-        )
-        assert not is_err(raw_history)
-        assert len(raw_history.value) == 1
-        assert raw_history.value[0].user_id == "u1"
-        assert raw_history.value[0].role == "user"
-        assert raw_history.value[0].message_content["payload"]["text"] == "hello"
+    history_result = await chat_history_query.get_recent_history(
+        DiscordConversationScope(guild_id="guild-1", channel_id="channel-1"),
+        limit=10,
+    )
 
-        query = uow.GetChatHistoryQuery()
-        history = await query.get_recent_history(ChatType.DISCORD, limit=10)
-        assert not is_err(history)
-        assert history.value[-1].message_content.payload["text"] == "hello"
+    assert not is_err(history_result)
+    assert len(history_result.value) == 1
+    message = history_result.value[0]
+    assert message.external_sender_id.to_primitive() == "discord-user-1"
+    assert message.content.payload["text"] == "hello"
+    assert message.occurred_at == datetime(2026, 9, 5, 9, 0, tzinfo=UTC)

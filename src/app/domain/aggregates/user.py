@@ -35,6 +35,25 @@ class User:
         """ユーザーを登録するファクトリメソッド"""
         return User(_display_name=display_name, _email=email)
 
+    @classmethod
+    def restore(
+        cls,
+        *,
+        user_id: UserId,
+        display_name: DisplayName,
+        email: Email,
+        version: Version,
+        created_at: datetime,
+        updated_at: datetime,
+    ) -> User:
+        """Restore a user with persistence-managed identity and audit state."""
+        user = cls(_display_name=display_name, _email=email)
+        user._id = user_id
+        user._version = version
+        user._created_at = created_at
+        user._updated_at = updated_at
+        return user
+
     @property
     def id(self) -> UserId:
         return self._id

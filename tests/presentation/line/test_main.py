@@ -1,5 +1,6 @@
 """Tests for LINE entrypoint helpers."""
 
+from datetime import UTC, datetime
 from importlib import import_module
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -19,6 +20,16 @@ def _load_line_main(monkeypatch: pytest.MonkeyPatch):
 
     sys.modules.pop(module_name, None)
     return import_module(module_name)
+
+
+def test_line_timestamp_conversion_rejects_invalid_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed LINE timestamps are rejected instead of being replaced."""
+    line_main = _load_line_main(monkeypatch)
+
+    with pytest.raises(ValueError, match="integer"):
+        line_main._occurred_at_from_line_timestamp("invalid")
 
 
 @pytest.mark.anyio
@@ -44,15 +55,18 @@ async def test_handle_callback_saves_message(monkeypatch: pytest.MonkeyPatch) ->
             message: FakeTextMessageContent,
             source: FakeUserSource,
             reply_token: str,
+            timestamp: int,
         ) -> None:
             self.message = message
             self.source = source
             self.reply_token = reply_token
+            self.timestamp = timestamp
 
     fake_event = FakeMessageEvent(
         message=FakeTextMessageContent("hello"),
         source=FakeUserSource("u1"),
         reply_token="reply-token",
+        timestamp=1_700_000_123_456,
     )
 
     monkeypatch.setattr(line_main, "MessageEvent", FakeMessageEvent)
@@ -75,6 +89,17 @@ async def test_handle_callback_saves_message(monkeypatch: pytest.MonkeyPatch) ->
     assert result == "OK"
     line_bot_api.reply_message.assert_not_awaited()
     line_main.Mediator.send_async.assert_awaited_once()
+    command = line_main.Mediator.send_async.await_args.args[0]
+    assert command.occurred_at == datetime(
+        2023,
+        11,
+        14,
+        22,
+        15,
+        23,
+        456000,
+        tzinfo=UTC,
+    )
 
 
 @pytest.mark.anyio
@@ -102,15 +127,18 @@ async def test_handle_callback_replies_on_save_error(
             message: FakeTextMessageContent,
             source: FakeUserSource,
             reply_token: str,
+            timestamp: int,
         ) -> None:
             self.message = message
             self.source = source
             self.reply_token = reply_token
+            self.timestamp = timestamp
 
     fake_event = FakeMessageEvent(
         message=FakeTextMessageContent("hello"),
         source=FakeUserSource("u1"),
         reply_token="reply-token",
+        timestamp=1_700_000_123_456,
     )
 
     monkeypatch.setattr(line_main, "MessageEvent", FakeMessageEvent)

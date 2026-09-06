@@ -29,10 +29,11 @@ class DirectMessageResponseCog(BaseCog, name="DM Response"):
 
         save_result = await Mediator.send_async(
             SaveDiscordChatCommand(
-                user_id=str(message.author.id),
+                external_sender_id=str(message.author.id),
                 guild_id=guild_id,
                 channel_id=channel_id,
                 content=message.content,
+                occurred_at=message.created_at,
             )
         )
         if is_err(save_result):

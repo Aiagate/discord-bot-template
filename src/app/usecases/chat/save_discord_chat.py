@@ -1,27 +1,16 @@
-"""Save chat message use case."""
+"""Save a Discord ChatMessage use case."""
 
 from dataclasses import dataclass
-from typing import Protocol, cast, runtime_checkable
+from datetime import datetime
 
 from flow_med import Request, RequestHandler
 from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
-from app.domain.aggregates.chat import DiscordChat
-from app.domain.repositories import IUnitOfWork
+from app.contracts.ports import IUnitOfWork
+from app.domain.aggregates.chat_message import ChatMessage
 from app.domain.value_objects.message_content import MessageContent
-from app.infrastructure.orm_mapping import ORMMappingRegistry
-from app.infrastructure.orm_models.chat_orm import ChatORM
 from app.usecases.result import ErrorType, UseCaseError
-
-
-@runtime_checkable
-class _SessionProtocol(Protocol):
-    """Subset of async session behavior needed by this use case."""
-
-    def add(self, instance: object) -> None: ...
-
-    async def flush(self) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -33,15 +22,16 @@ class SaveChatResult:
 
 @dataclass(frozen=True)
 class SaveDiscordChatCommand(Request[Result[SaveChatResult, UseCaseError]]):
-    """Command to persist a chat message."""
+    """Command to persist a Discord message with its external occurrence time."""
 
-    user_id: str
+    external_sender_id: str
     guild_id: str
     channel_id: str
     content: str
+    occurred_at: datetime
 
 
-class SaveChatHandler(
+class SaveDiscordChatHandler(
     RequestHandler[SaveDiscordChatCommand, Result[SaveChatResult, UseCaseError]]
 ):
     """Handle SaveChatCommand."""
@@ -56,15 +46,23 @@ class SaveChatHandler(
     async def handle(
         self, request: SaveDiscordChatCommand
     ) -> Result[SaveChatResult, UseCaseError]:
-        """Persist an incoming Discord DM chat message."""
-        async with self._uow:
-            add_result = await _save_raw_discord_chat(
-                self._uow,
-                request.user_id,
-                request.guild_id,
-                request.channel_id,
-                request.content,
+        """Persist an incoming Discord message."""
+        try:
+            message = ChatMessage.create_discord(
+                guild_id=request.guild_id,
+                channel_id=request.channel_id,
+                external_sender_id=request.external_sender_id,
+                content=MessageContent.text(request.content),
+                occurred_at=request.occurred_at,
             )
+        except (TypeError, ValueError) as error:
+            return Err(
+                UseCaseError(type=ErrorType.VALIDATION_ERROR, message=str(error))
+            )
+
+        async with self._uow:
+            repository = self._uow.GetRepository(ChatMessage)
+            add_result = await repository.add(message)
             if is_err(add_result):
                 return Err(
                     UseCaseError(
@@ -83,37 +81,3 @@ class SaveChatHandler(
                 )
 
             return Ok(SaveChatResult(id=add_result.value.id.to_primitive()))
-
-
-async def _save_raw_discord_chat(
-    uow: IUnitOfWork,
-    user_id: str,
-    guild_id: str,
-    channel_id: str,
-    content: str,
-) -> Result[DiscordChat, UseCaseError]:
-    """Persist a raw Discord chat row with user scope and role."""
-    session = getattr(uow, "_session", None)
-    if not isinstance(session, _SessionProtocol):
-        return Err(
-            UseCaseError(
-                type=ErrorType.UNEXPECTED,
-                message="Unit of work session is not available",
-            )
-        )
-
-    chat_orm = cast(
-        ChatORM,
-        ORMMappingRegistry.to_orm(
-            DiscordChat.create(
-                guild_id=guild_id,
-                channel_id=channel_id,
-                message_content=MessageContent.text(content),
-            )
-        ),
-    )
-    chat_orm.user_id = user_id
-    chat_orm.role = "user"
-    session.add(chat_orm)
-    await session.flush()
-    return Ok(cast(DiscordChat, ORMMappingRegistry.from_orm(chat_orm)))

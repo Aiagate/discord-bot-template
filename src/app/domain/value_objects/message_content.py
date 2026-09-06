@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -28,6 +29,10 @@ class MessageContent:
 
     _type: MessageContentType
     _payload: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        """Copy the complete payload before storing it."""
+        object.__setattr__(self, "_payload", deepcopy(self._payload))
 
     @classmethod
     def text(cls, text: str) -> MessageContent:
@@ -62,8 +67,8 @@ class MessageContent:
 
     @property
     def payload(self) -> dict[str, Any]:
-        """Return a copy of the message content payload."""
-        return self._payload.copy()
+        """Return an independent copy of the message content payload."""
+        return deepcopy(self._payload)
 
     @classmethod
     def from_primitive(
@@ -84,14 +89,11 @@ class MessageContent:
         except ValueError:
             return Err(ValueError(f"Invalid message content type: {content_type}"))
 
-        return Ok(cls(_type=normalized_type, _payload=payload.copy()))
+        return Ok(cls(_type=normalized_type, _payload=payload))
 
     def to_primitive(self) -> dict[str, Any]:
         """Convert message content to a persistence payload."""
         return {
             "type": self._type.value,
-            "payload": self._payload.copy(),
+            "payload": deepcopy(self._payload),
         }
-
-
-MassageContent = MessageContent

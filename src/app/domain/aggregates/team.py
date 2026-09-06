@@ -36,6 +36,24 @@ class Team:
         """Factory method to create a new Team."""
         return Team(_name=name)
 
+    @classmethod
+    def restore(
+        cls,
+        *,
+        team_id: TeamId,
+        name: TeamName,
+        version: Version,
+        created_at: datetime,
+        updated_at: datetime,
+    ) -> Team:
+        """Restore a team with persistence-managed identity and audit state."""
+        team = cls(_name=name)
+        team._id = team_id
+        team._version = version
+        team._created_at = created_at
+        team._updated_at = updated_at
+        return team
+
     @property
     def id(self) -> TeamId:
         return self._id

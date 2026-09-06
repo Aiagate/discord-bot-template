@@ -1,5 +1,6 @@
 """Create User use case."""
 
+import asyncio
 import logging
 from dataclasses import dataclass
 
@@ -7,9 +8,10 @@ from flow_med import Request, RequestHandler
 from flow_res import Ok, Result, combine_all, is_err
 from injector import inject
 
+from app.contracts.messages import USER_CREATED_TOPIC, UserCreatedEvent
+from app.contracts.ports import IUnitOfWork
 from app.contracts.ports.event_bus import IEventBus
 from app.domain.aggregates.user import User
-from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import DisplayName, Email
 from app.usecases.result import ErrorType, UseCaseError
 
@@ -75,9 +77,18 @@ class CreateUserHandler(
             if is_err(commit_result):
                 return commit_result
 
-            id = user.id.to_primitive()
+            user_id = user.id.to_primitive()
 
-            # イベントの発行（例外が発生してもUseCaseの結果には影響させないよう、バックグラウンド的に扱う）
-            await self._event_bus.publish("user.created", {"user_id": id})
+        try:
+            event = UserCreatedEvent(user_id=user_id)
+            await self._event_bus.publish(USER_CREATED_TOPIC, event.to_payload())
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                "Failed to publish %s for user %s",
+                USER_CREATED_TOPIC,
+                user_id,
+            )
 
-            return Ok(CreateUserResult(id=id))
+        return Ok(CreateUserResult(id=user_id))

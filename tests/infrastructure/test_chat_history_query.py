@@ -1,49 +1,182 @@
-"""Tests for chat history query."""
+"""Tests for conversation-scoped ChatMessage history queries."""
 
-from typing import Any, cast
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from flow_res import is_ok
 
-from app.domain.aggregates.chat import Chat, DiscordChat
-from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects.chat_type import ChatType
-from app.domain.value_objects.message_content import MessageContent
+from app.contracts.ports import IChatHistoryQuery, IUnitOfWork
+from app.domain.aggregates.chat_message import ChatMessage
+from app.domain.value_objects import (
+    DiscordConversationScope,
+    LineConversationScope,
+    MessageContent,
+)
 
 
-async def _save_chat(uow: IUnitOfWork, content: str, channel_id: str) -> None:
-    """Persist a Discord chat message for query tests."""
+async def _save_message(uow: IUnitOfWork, message: ChatMessage) -> None:
+    """Persist one message for query tests."""
     async with uow:
-        repo = cast(Any, uow.GetRepository(Chat))
-        save_result = await repo.add(
-            DiscordChat.create(
-                guild_id="DM",
-                channel_id=channel_id,
-                message_content=MessageContent.text(content),
-            )
-        )
+        repository = uow.GetRepository(ChatMessage)
+        save_result = await repository.add(message)
         assert is_ok(save_result)
         commit_result = await uow.commit()
         assert is_ok(commit_result)
 
 
 @pytest.mark.anyio
-async def test_get_recent_history_returns_chronological_order(
+async def test_history_is_scoped_to_one_discord_conversation(
     uow: IUnitOfWork,
+    chat_history_query: IChatHistoryQuery,
 ) -> None:
-    """Test recent history order and subtype restoration."""
-    await _save_chat(uow, "first", "1")
-    await _save_chat(uow, "second", "1")
+    """Discord history excludes messages from another guild or channel."""
+    start = datetime(2026, 9, 5, 9, 0, tzinfo=UTC)
+    await _save_message(
+        uow,
+        ChatMessage.create_discord(
+            guild_id="guild-1",
+            channel_id="channel-1",
+            external_sender_id="user-1",
+            content=MessageContent.text("first"),
+            occurred_at=start,
+        ),
+    )
+    await _save_message(
+        uow,
+        ChatMessage.create_discord(
+            guild_id="guild-1",
+            channel_id="channel-2",
+            external_sender_id="user-1",
+            content=MessageContent.text("other channel"),
+            occurred_at=start + timedelta(minutes=1),
+        ),
+    )
+    await _save_message(
+        uow,
+        ChatMessage.create_discord(
+            guild_id="guild-1",
+            channel_id="channel-1",
+            external_sender_id="user-2",
+            content=MessageContent.text("second"),
+            occurred_at=start + timedelta(minutes=2),
+        ),
+    )
 
-    async with uow:
-        query = uow.GetChatHistoryQuery()
-        result = await query.get_recent_history(ChatType.DISCORD, limit=10)
-        assert is_ok(result)
-        history = result.value
+    result = await chat_history_query.get_recent_history(
+        DiscordConversationScope(guild_id="guild-1", channel_id="channel-1"),
+        limit=10,
+    )
 
-        assert len(history) == 2
-        assert [item.message_content.payload["text"] for item in history] == [
-            "first",
-            "second",
-        ]
-        assert isinstance(history[0], DiscordChat)
+    assert is_ok(result)
+    assert [item.content.payload["text"] for item in result.value] == [
+        "first",
+        "second",
+    ]
+
+
+@pytest.mark.anyio
+async def test_history_keeps_line_user_group_and_room_scopes_separate(
+    uow: IUnitOfWork,
+    chat_history_query: IChatHistoryQuery,
+) -> None:
+    """LINE history distinguishes user, group, and room conversations."""
+    messages = [
+        ChatMessage.create_line_user(
+            line_user_id="line-user-1",
+            external_sender_id="line-user-1",
+            content=MessageContent.text("user"),
+            occurred_at=datetime(2026, 9, 5, 9, 0, tzinfo=UTC),
+        ),
+        ChatMessage.create_line_group(
+            line_group_id="line-group-1",
+            external_sender_id="line-user-1",
+            content=MessageContent.text("group"),
+            occurred_at=datetime(2026, 9, 5, 9, 0, tzinfo=UTC),
+        ),
+        ChatMessage.create_line_room(
+            line_room_id="line-room-1",
+            external_sender_id="line-user-1",
+            content=MessageContent.text("room"),
+            occurred_at=datetime(2026, 9, 5, 9, 0, tzinfo=UTC),
+        ),
+    ]
+    for message in messages:
+        await _save_message(uow, message)
+
+    group_result = await chat_history_query.get_recent_history(
+        LineConversationScope.group("line-group-1"),
+        limit=10,
+    )
+    room_result = await chat_history_query.get_recent_history(
+        LineConversationScope.room("line-room-1"),
+        limit=10,
+    )
+
+    assert is_ok(group_result)
+    assert is_ok(room_result)
+    assert [item.content.payload["text"] for item in group_result.value] == ["group"]
+    assert [item.content.payload["text"] for item in room_result.value] == ["room"]
+
+
+@pytest.mark.anyio
+async def test_history_limit_returns_newest_messages_in_chronological_order(
+    uow: IUnitOfWork,
+    chat_history_query: IChatHistoryQuery,
+) -> None:
+    """A limited history contains the newest messages ordered oldest to newest."""
+    start = datetime(2026, 9, 5, 9, 0, tzinfo=UTC)
+    for index in range(5):
+        await _save_message(
+            uow,
+            ChatMessage.create_discord(
+                guild_id="guild-1",
+                channel_id="channel-1",
+                external_sender_id="user-1",
+                content=MessageContent.text(f"message-{index}"),
+                occurred_at=start + timedelta(minutes=index),
+            ),
+        )
+
+    result = await chat_history_query.get_recent_history(
+        DiscordConversationScope(guild_id="guild-1", channel_id="channel-1"),
+        limit=3,
+    )
+
+    assert is_ok(result)
+    assert [item.content.payload["text"] for item in result.value] == [
+        "message-2",
+        "message-3",
+        "message-4",
+    ]
+
+
+@pytest.mark.anyio
+async def test_sequential_queries_use_isolated_read_sessions(
+    uow: IUnitOfWork,
+    chat_history_query: IChatHistoryQuery,
+) -> None:
+    """A query call closes its session before the next call begins."""
+    await _save_message(
+        uow,
+        ChatMessage.create_discord(
+            guild_id="guild-1",
+            channel_id="channel-1",
+            external_sender_id="user-1",
+            content=MessageContent.text("one"),
+            occurred_at=datetime(2026, 9, 5, 9, 0, tzinfo=UTC),
+        ),
+    )
+
+    first_result = await chat_history_query.get_recent_history(
+        DiscordConversationScope(guild_id="guild-1", channel_id="channel-1"),
+        limit=10,
+    )
+    second_result = await chat_history_query.get_recent_history(
+        DiscordConversationScope(guild_id="guild-1", channel_id="channel-1"),
+        limit=10,
+    )
+
+    assert is_ok(first_result)
+    assert is_ok(second_result)
+    assert [item.content.payload["text"] for item in first_result.value] == ["one"]
+    assert [item.content.payload["text"] for item in second_result.value] == ["one"]

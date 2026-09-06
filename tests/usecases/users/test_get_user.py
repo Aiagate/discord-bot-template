@@ -3,8 +3,8 @@
 import pytest
 from flow_res import is_err, is_ok
 
+from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.user import User
-from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import DisplayName, Email
 from app.usecases.result import ErrorType
 from app.usecases.users.get_user import GetUserHandler, GetUserQuery
