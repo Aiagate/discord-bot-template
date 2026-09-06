@@ -3,6 +3,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from pprint import pformat
 
@@ -20,10 +21,16 @@ from linebot.v3.messaging import (
     TextMessage,
 )
 from linebot.v3.webhook import WebhookParser
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
-from linebot.v3.webhooks.models.user_source import UserSource
+from linebot.v3.webhooks import (
+    GroupSource,
+    MessageEvent,
+    RoomSource,
+    TextMessageContent,
+    UserSource,
+)
 
 from app import container
+from app.domain.value_objects.conversation_scope import LineConversationScope
 from app.infrastructure.database import init_db
 from app.usecases.chat.save_line_chat import SaveLineChatCommand
 
@@ -85,6 +92,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(lifespan=lifespan)
 
 
+def _occurred_at_from_line_timestamp(timestamp: object) -> datetime:
+    """Convert LINE's millisecond event timestamp to an aware UTC datetime."""
+    if isinstance(timestamp, bool) or not isinstance(timestamp, int):
+        raise ValueError("LINE event timestamp must be an integer.")
+
+    seconds, milliseconds = divmod(timestamp, 1000)
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC).replace(
+            microsecond=milliseconds * 1000
+        )
+    except (OSError, OverflowError, ValueError) as error:
+        raise ValueError("LINE event timestamp is out of range.") from error
+
+
 @app.post("/callback")
 async def handle_callback(request: Request):
     signature = request.headers["X-Line-Signature"]
@@ -111,35 +132,62 @@ async def handle_callback(request: Request):
                 if isinstance(event.message, TextMessageContent):
                     logger.info(f"Received text message: {event.message}")
 
-                    if isinstance(event.source, UserSource):
-                        user_id = event.source.user_id
+                    source = event.source
+                    if isinstance(source, UserSource):
+                        sender_id = source.user_id
+                        conversation_scope = (
+                            LineConversationScope.user(sender_id)
+                            if sender_id is not None
+                            else None
+                        )
+                    elif isinstance(source, GroupSource):
+                        sender_id = source.user_id
+                        conversation_scope = (
+                            LineConversationScope.group(source.group_id)
+                            if sender_id is not None
+                            else None
+                        )
+                    elif isinstance(source, RoomSource):
+                        sender_id = source.user_id
+                        conversation_scope = (
+                            LineConversationScope.room(source.room_id)
+                            if sender_id is not None
+                            else None
+                        )
+                    else:
+                        sender_id = None
+                        conversation_scope = None
 
-                        if user_id is None:
-                            logger.warning("User ID is None in UserSource")
-                            continue
+                    if sender_id is None or conversation_scope is None:
+                        logger.warning("LINE message source has no sender identity")
+                        continue
 
-                        save_result = await Mediator.send_async(
-                            SaveLineChatCommand(
-                                user_id=user_id,
-                                content=event.message.text,
+                    save_result = await Mediator.send_async(
+                        SaveLineChatCommand(
+                            external_sender_id=sender_id,
+                            conversation_scope=conversation_scope,
+                            content=event.message.text,
+                            occurred_at=_occurred_at_from_line_timestamp(
+                                event.timestamp
+                            ),
+                        )
+                    )
+
+                    if is_err(save_result):
+                        await line_bot_api.reply_message(
+                            ReplyMessageRequest(
+                                replyToken=event.reply_token or "",
+                                messages=[
+                                    TextMessage(
+                                        text="メッセージの保存に失敗しました。",
+                                        quickReply=None,
+                                        quoteToken=None,
+                                    )
+                                ],
+                                notificationDisabled=False,
                             )
                         )
-
-                        if is_err(save_result):
-                            await line_bot_api.reply_message(
-                                ReplyMessageRequest(
-                                    replyToken=event.reply_token or "",
-                                    messages=[
-                                        TextMessage(
-                                            text="メッセージの保存に失敗しました。",
-                                            quickReply=None,
-                                            quoteToken=None,
-                                        )
-                                    ],
-                                    notificationDisabled=False,
-                                )
-                            )
-                            return
+                        return
                 return "OK"
             case _:
                 logger.info(f"Received non-message event: {event}")

@@ -2,34 +2,19 @@
 
 from __future__ import annotations
 
-import inspect
 import logging
+from collections.abc import Callable
 from dataclasses import fields, is_dataclass
 from typing import Any, ClassVar, TypeVar, cast, get_args, get_origin, get_type_hints
 
 from flow_res import Result, is_err, is_ok
 from sqlmodel import SQLModel
 
-from app.domain.aggregates.chat import Chat, DiscordChat, LineChat
 from app.domain.interfaces import IValueObject
-from app.infrastructure.orm_models.chat_orm import ChatORM
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
-
-def _get_entity_properties(entity_type: type) -> dict[str, property]:
-    """Get all properties defined on an entity class.
-
-    Returns a dictionary mapping property name to property object.
-    Excludes dunder properties (starting with __).
-    """
-    return {
-        name: obj
-        for name, obj in inspect.getmembers(entity_type)
-        if isinstance(obj, property) and not name.startswith("__")
-    }
 
 
 def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
@@ -55,57 +40,15 @@ def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
         raise TypeError(f"Expected dataclass, got {type(entity).__name__}")
 
     result: dict[str, Any] = {}
-    entity_type = type(entity)
+    for field in fields(entity):
+        field_value = getattr(entity, field.name)
 
-    # Check if entity has properties (like Team with _id -> id property)
-    properties = _get_entity_properties(entity_type)
-
-    if properties:
-        # Property-based entity (Team pattern)
-        # Use property names as ORM column names
-        for name in properties:
-            field_value = getattr(entity, name)
-
-            if isinstance(field_value, IValueObject):
-                result[name] = field_value.to_primitive()
-            else:
-                result[name] = field_value
-    else:
-        # Field-based entity (User pattern - legacy)
-        # Use dataclass field names directly
-        for field in fields(entity):
-            field_value = getattr(entity, field.name)
-
-            if isinstance(field_value, IValueObject):
-                result[field.name] = field_value.to_primitive()
-            else:
-                result[field.name] = field_value
+        if isinstance(field_value, IValueObject):
+            result[field.name] = field_value.to_primitive()
+        else:
+            result[field.name] = field_value
 
     return result
-
-
-def _build_field_to_property_mapping(entity_type: type) -> dict[str, str]:
-    """Build mapping from private field names to property names.
-
-    For entities with private fields (e.g., _id) and corresponding properties
-    (e.g., id), builds a mapping from field name to property name.
-
-    Returns:
-        Dictionary mapping field name to property name (e.g., {"_id": "id"}).
-    """
-    properties = _get_entity_properties(entity_type)
-    property_names = set(properties.keys())
-
-    mapping: dict[str, str] = {}
-    for field in fields(entity_type):
-        field_name = field.name
-        # Check if field name starts with _ and has corresponding property
-        if field_name.startswith("_"):
-            public_name = field_name[1:]  # Remove leading underscore
-            if public_name in property_names:
-                mapping[field_name] = public_name
-
-    return mapping
 
 
 def _convert_orm_value_to_field_value(
@@ -171,8 +114,9 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
     Automatically converts primitive fields to IValueObject instances
     based on type annotations.
 
-    For property-based entities with init=False fields, values are set
-    directly using object.__setattr__ after initial construction.
+    For dataclasses with init=False fields, values are set directly using
+    object.__setattr__ after initial construction. Aggregates with private
+    fields use explicit mappers instead of this generic fallback.
 
     Args:
         orm_instance: ORM model instance
@@ -197,9 +141,6 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
     # Get type hints from the entity class
     type_hints = get_type_hints(entity_type)
 
-    # Build mapping from private field names to property names
-    field_to_property = _build_field_to_property_mapping(entity_type)
-
     init_kwargs: dict[str, Any] = {}
     non_init_values: dict[str, Any] = {}
 
@@ -213,12 +154,8 @@ def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
                 f"in {entity_type.__name__}"
             )
 
-        # Determine ORM column name
-        # For property-based entities, use the property name (e.g., "id" not "_id")
-        orm_column_name = field_to_property.get(field_name, field_name)
-
         # Get the value from ORM instance
-        orm_value = getattr(orm_instance, orm_column_name, None)
+        orm_value = getattr(orm_instance, field_name, None)
 
         # Convert the value
         converted_value = _convert_orm_value_to_field_value(
@@ -250,12 +187,16 @@ class ORMMappingRegistry:
     """
 
     _domain_to_orm: ClassVar[dict[type, type[SQLModel]]] = {}
+    _custom_to_orm: ClassVar[dict[type, Callable[[Any], SQLModel]]] = {}
+    _custom_from_orm: ClassVar[dict[type[SQLModel], Callable[[SQLModel], Any]]] = {}
 
     @classmethod
     def register(
         cls,
         domain_type: type,
         orm_type: type[SQLModel],
+        to_orm: Callable[[Any], SQLModel] | None = None,
+        from_orm: Callable[[SQLModel], Any] | None = None,
     ) -> None:
         """Register a domain-ORM mapping pair.
 
@@ -264,6 +205,14 @@ class ORMMappingRegistry:
             orm_type: ORM model class (e.g., UserORM, TeamORM)
         """
         cls._domain_to_orm[domain_type] = orm_type
+        if to_orm is None:
+            cls._custom_to_orm.pop(domain_type, None)
+        else:
+            cls._custom_to_orm[domain_type] = to_orm
+        if from_orm is None:
+            cls._custom_from_orm.pop(orm_type, None)
+        else:
+            cls._custom_from_orm[orm_type] = from_orm
         logger.debug(
             f"Registered ORM mapping: {domain_type.__name__} <-> {orm_type.__name__}"
         )
@@ -301,7 +250,10 @@ class ORMMappingRegistry:
                 f"No ORM mapping registered for domain type: {domain_type.__name__}"
             )
 
-        # Use automatic conversion
+        custom_mapper = cls._custom_to_orm.get(domain_type)
+        if custom_mapper is not None:
+            return custom_mapper(domain_instance)
+
         orm_dict = entity_to_orm_dict(domain_instance)
         return orm_type(**orm_dict)
 
@@ -318,12 +270,9 @@ class ORMMappingRegistry:
         Raises:
             ValueError: If ORM type is not registered
         """
-        if isinstance(orm_instance, ChatORM):
-            if orm_instance.type == "DISCORD":
-                return orm_to_entity(orm_instance, DiscordChat)
-            if orm_instance.type == "LINE":
-                return orm_to_entity(orm_instance, LineChat)
-            return orm_to_entity(orm_instance, Chat)
+        custom_mapper = cls._custom_from_orm.get(type(orm_instance))
+        if custom_mapper is not None:
+            return custom_mapper(orm_instance)
 
         # Find domain type by ORM type
         orm_type = type(orm_instance)
@@ -349,6 +298,8 @@ class ORMMappingRegistry:
 def register_orm_mapping(
     domain_type: type,
     orm_type: type[SQLModel],
+    to_orm: Callable[[Any], SQLModel] | None = None,
+    from_orm: Callable[[SQLModel], Any] | None = None,
 ) -> None:
     """Register ORM mapping for a domain type.
 
@@ -364,4 +315,4 @@ def register_orm_mapping(
         >>> from app.infrastructure.orm_models.user_orm import UserORM
         >>> register_orm_mapping(User, UserORM)
     """
-    ORMMappingRegistry.register(domain_type, orm_type)
+    ORMMappingRegistry.register(domain_type, orm_type, to_orm, from_orm)

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, func
+from sqlalchemy import Column, DateTime, Index, func, text
 from sqlmodel import Field, SQLModel
 
 
@@ -13,6 +13,16 @@ class TeamMembershipORM(SQLModel, table=True):
     """
 
     __tablename__ = "team_memberships"  # type: ignore[reportAssignmentType]
+    __table_args__ = (
+        Index(
+            "uq_team_memberships_current_period",
+            "team_id",
+            "user_id",
+            unique=True,
+            sqlite_where=text("status IN ('PENDING', 'ACTIVE')"),
+            postgresql_where=text("status IN ('PENDING', 'ACTIVE')"),
+        ),
+    )
 
     id: str | None = Field(default=None, primary_key=True, max_length=26)
     team_id: str = Field(max_length=26, index=True)

@@ -6,10 +6,10 @@ from typing import TypeVar
 
 from flow_res import Err, Ok, Result, is_err
 from sqlalchemy import select, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.interfaces import IAuditable, IValueObject, IVersionable
+from app.domain.interfaces import IAppendOnly, IAuditable, IValueObject, IVersionable
 from app.domain.repositories import (
     IRepositoryWithId,
     RepositoryError,
@@ -84,7 +84,7 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
 
             # Use registry for conversion
             return Ok(ORMMappingRegistry.from_orm(orm_instance))
-        except SQLAlchemyError as e:
+        except (SQLAlchemyError, TypeError, ValueError) as e:
             logger.exception("Database error occurred in get_by_id")
             err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
             return Err(err)
@@ -122,7 +122,21 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
             await self._session.flush()
             return Ok(ORMMappingRegistry.from_orm(orm_instance))
 
-        except SQLAlchemyError as e:
+        except IntegrityError as e:
+            await self._session.rollback()
+            logger.info(
+                "Entity insert conflicted with an existing database record: %s",
+                self._entity_type.__name__,
+            )
+            err = RepositoryError(
+                type=RepositoryErrorType.ALREADY_EXISTS,
+                message=(
+                    f"{self._entity_type.__name__} conflicts with an existing "
+                    f"record: {e.orig}"
+                ),
+            )
+            return Err(err)
+        except (SQLAlchemyError, TypeError, ValueError) as e:
             logger.exception("Database error occurred in add")
             err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
             return Err(err)
@@ -139,6 +153,14 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
 
         Returns NOT_FOUND error if entity doesn't exist in the database.
         """
+        if isinstance(entity, IAppendOnly) and entity.is_append_only:
+            return Err(
+                RepositoryError(
+                    type=RepositoryErrorType.UNEXPECTED,
+                    message=f"{self._entity_type.__name__} is append-only",
+                )
+            )
+
         try:
             # Use registry for conversion
             orm_instance = ORMMappingRegistry.to_orm(entity)
@@ -232,13 +254,35 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
                 await self._session.flush()
                 return Ok(ORMMappingRegistry.from_orm(orm_instance))
 
-        except SQLAlchemyError as e:
+        except IntegrityError as e:
+            await self._session.rollback()
+            logger.info(
+                "Entity update conflicted with an existing database record: %s",
+                self._entity_type.__name__,
+            )
+            err = RepositoryError(
+                type=RepositoryErrorType.ALREADY_EXISTS,
+                message=(
+                    f"{self._entity_type.__name__} conflicts with an existing "
+                    f"record: {e.orig}"
+                ),
+            )
+            return Err(err)
+        except (SQLAlchemyError, TypeError, ValueError) as e:
             logger.exception("Database error occurred in update")
             err = RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
             return Err(err)
 
     async def delete(self, entity: T) -> Result[None, RepositoryError]:
         """Delete entity."""
+        if isinstance(entity, IAppendOnly) and entity.is_append_only:
+            return Err(
+                RepositoryError(
+                    type=RepositoryErrorType.UNEXPECTED,
+                    message=f"{self._entity_type.__name__} is append-only",
+                )
+            )
+
         try:
             entity_id_result = self._get_entity_id(entity)
             if is_err(entity_id_result):

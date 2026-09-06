@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime
 
+import pytest
+
 from app.domain.aggregates.team_membership import TeamMembership
 from app.domain.value_objects import (
     MembershipRole,
@@ -59,6 +61,16 @@ def test_team_membership_activate() -> None:
     membership.activate()
 
     assert membership.status == MembershipStatus.ACTIVE
+
+
+def test_team_membership_cannot_approve_active_period() -> None:
+    """Approval is a domain transition available only from PENDING."""
+    team_id = TeamId.generate().expect("Success")
+    user_id = UserId.generate().expect("Success")
+    membership = TeamMembership.join(team_id=team_id, user_id=user_id)
+
+    with pytest.raises(ValueError, match="PENDING"):
+        membership.approve()
 
 
 def test_team_membership_leave() -> None:

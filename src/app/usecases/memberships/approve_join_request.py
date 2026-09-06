@@ -7,9 +7,12 @@ from flow_med import Request, RequestHandler
 from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
-from app.domain.aggregates.team_membership import TeamMembership
-from app.domain.repositories import IUnitOfWork
-from app.domain.value_objects import MembershipId, MembershipStatus
+from app.contracts.ports import IUnitOfWork
+from app.domain.aggregates.team_membership import (
+    MembershipTransitionError,
+    TeamMembership,
+)
+from app.domain.value_objects import MembershipId
 from app.usecases.result import ErrorType, UseCaseError
 
 logger = logging.getLogger(__name__)
@@ -72,15 +75,15 @@ class ApproveJoinRequestHandler(
 
             membership = membership_result.unwrap()
 
-            if membership.status != MembershipStatus.PENDING:
+            try:
+                membership.approve()
+            except MembershipTransitionError as error:
                 return Err(
                     UseCaseError(
                         type=ErrorType.VALIDATION_ERROR,
-                        message=f"Membership is not in PENDING status (current: {membership.status.value})",
+                        message=str(error),
                     )
                 )
-
-            membership.activate()
 
             update_result = await membership_repo.update(membership)
             if is_err(update_result):

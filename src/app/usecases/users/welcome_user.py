@@ -7,8 +7,8 @@ from flow_med import Request, RequestHandler
 from flow_res import Ok, Result, is_err
 from injector import inject
 
+from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.user import User
-from app.domain.repositories import IUnitOfWork
 from app.domain.value_objects import UserId
 from app.usecases.result import UseCaseError
 

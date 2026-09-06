@@ -15,6 +15,10 @@ from app.domain.value_objects import (
 )
 
 
+class MembershipTransitionError(ValueError):
+    """Raised when a membership status transition is not allowed."""
+
+
 @dataclass(kw_only=True, slots=True)
 class TeamMembership:
     """Team membership aggregate root.
@@ -65,6 +69,32 @@ class TeamMembership:
             _status=MembershipStatus.PENDING,
         )
 
+    @classmethod
+    def restore(
+        cls,
+        *,
+        membership_id: MembershipId,
+        team_id: TeamId,
+        user_id: UserId,
+        role: MembershipRole,
+        status: MembershipStatus,
+        version: Version,
+        created_at: datetime,
+        updated_at: datetime,
+    ) -> TeamMembership:
+        """Restore an enrollment period with persistence-managed state."""
+        membership = cls(
+            _team_id=team_id,
+            _user_id=user_id,
+            _role=role,
+            _status=status,
+        )
+        membership._id = membership_id
+        membership._version = version
+        membership._created_at = created_at
+        membership._updated_at = updated_at
+        return membership
+
     @property
     def id(self) -> MembershipId:
         return self._id
@@ -102,10 +132,21 @@ class TeamMembership:
         self._role = new_role
         return self
 
-    def activate(self) -> TeamMembership:
-        """Activate the membership (e.g. after approval)."""
+    def approve(self) -> TeamMembership:
+        """Approve a pending enrollment period."""
+        if self._status is not MembershipStatus.PENDING:
+            raise MembershipTransitionError(
+                f"Membership is not in PENDING status (current: {self._status.value})"
+            )
         self._status = MembershipStatus.ACTIVE
         return self
+
+    def activate(self) -> TeamMembership:
+        """Activate a pending membership.
+
+        Kept as a compatibility alias for callers using the former name.
+        """
+        return self.approve()
 
     def leave(self) -> TeamMembership:
         """User leaves the team."""

@@ -5,12 +5,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, overload
 
 from flow_res import Result
-
-from app.domain.queries.chat_history_query import IChatHistoryQuery
-from app.domain.queries.raw_chat_log_query import IRawChatLogQuery
 
 
 class RepositoryErrorType(Enum):
@@ -76,84 +72,4 @@ class IRepositoryWithId[T, K](IRepository[T], ABC):
     @abstractmethod
     async def get_by_id(self, id: K) -> Result[T, RepositoryError]:
         """Get entity by ID."""
-        pass
-
-
-class IUnitOfWork(ABC):
-    """Unit of Work interface for transaction management."""
-
-    @overload
-    def GetRepository[T](self, entity_type: type[T]) -> IRepository[T]:
-        """Get repository for add and delete operations.
-
-        Args:
-            entity_type: The domain entity type (e.g., User)
-
-        Returns:
-            Repository instance with add and delete operations
-        """
-        ...
-
-    @overload
-    def GetRepository[T, K](
-        self, entity_type: type[T], key_type: type[K]
-    ) -> IRepositoryWithId[T, K]:
-        """Get repository with ID-based get operation.
-
-        Args:
-            entity_type: The domain entity type (e.g., User)
-            key_type: The primary key type (e.g., int, str, UserId)
-
-        Returns:
-            Repository instance with all operations (add, delete, get_by_id)
-        """
-        ...
-
-    @abstractmethod
-    def GetRepository[T, K](
-        self, entity_type: type[T], key_type: type[K] | None = None
-    ) -> IRepository[T] | IRepositoryWithId[T, K]:
-        """Get repository for entity type.
-
-        This method is overloaded:
-        - GetRepository(User) -> IRepository[User] (add, delete)
-        - GetRepository(User, UserId) -> IRepositoryWithId[User, UserId] (add, delete, get_by_id)
-
-        Args:
-            entity_type: The domain entity type
-            key_type: Optional primary key type
-
-        Returns:
-            Repository instance
-        """
-        pass
-
-    @abstractmethod
-    async def commit(self) -> Result[None, RepositoryError]:
-        """Commit the transaction."""
-        pass
-
-    @abstractmethod
-    async def rollback(self) -> None:
-        """Rollback the transaction."""
-        pass
-
-    @abstractmethod
-    def GetChatHistoryQuery(self) -> IChatHistoryQuery:
-        """Get the chat history query."""
-        pass
-
-    @abstractmethod
-    def GetRawChatLogQuery(self) -> IRawChatLogQuery:
-        """Get the raw chat log query."""
-        pass
-
-    @abstractmethod
-    async def __aenter__(self) -> IUnitOfWork:
-        """Enter async context manager."""
-        pass
-
-    @abstractmethod
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Exit async context manager with auto-commit/rollback."""
         pass

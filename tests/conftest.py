@@ -7,9 +7,9 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
-from app.contracts.ports.event_bus import IEventBus
-from app.domain.repositories import IUnitOfWork
+from app.contracts.ports import IChatHistoryQuery, IEventBus, IUnitOfWork
 from app.infrastructure.orm_registry import init_orm_mappings
+from app.infrastructure.queries.chat_history_query import SQLAlchemyChatHistoryQuery
 from app.infrastructure.unit_of_work import SQLAlchemyUnitOfWork
 
 # Initialize ORM mappings before any tests
@@ -75,3 +75,11 @@ async def uow(
 ) -> IUnitOfWork:
     """Provide Unit of Work for tests."""
     return SQLAlchemyUnitOfWork(session_factory)
+
+
+@pytest.fixture
+def chat_history_query(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> IChatHistoryQuery:
+    """Provide a query port with an independent session per call."""
+    return SQLAlchemyChatHistoryQuery(session_factory)
