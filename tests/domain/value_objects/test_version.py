@@ -1,5 +1,7 @@
 """Tests for Version value object."""
 
+import dataclasses
+
 import pytest
 from flow_res import is_err, is_ok
 
@@ -37,6 +39,37 @@ def test_version_from_primitive_non_int_fails() -> None:
     assert is_err(result)
     error = result.error
     assert isinstance(error, TypeError)
+
+
+@pytest.mark.parametrize("value", [-1, -100])
+def test_version_constructor_rejects_negative_values(value: int) -> None:
+    """Test direct construction enforces the non-negative invariant."""
+    with pytest.raises(ValueError, match="non-negative"):
+        Version(_value=value)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_version_constructor_rejects_bool(value: bool) -> None:
+    """Test bool is not accepted as an integer version number."""
+    with pytest.raises(TypeError, match="Version must be int"):
+        Version(_value=value)
+
+
+@pytest.mark.parametrize("value", [True, False])
+def test_version_from_primitive_rejects_bool(value: bool) -> None:
+    """Test from_primitive applies the same strict integer policy."""
+    result = Version.from_primitive(value)
+
+    assert is_err(result)
+    assert isinstance(result.error, TypeError)
+
+
+def test_version_dataclass_replace_revalidates_value() -> None:
+    """Test dataclasses.replace cannot create an invalid version."""
+    version = Version(_value=1)
+
+    with pytest.raises(ValueError, match="non-negative"):
+        dataclasses.replace(version, _value=-1)
 
 
 def test_version_increment() -> None:

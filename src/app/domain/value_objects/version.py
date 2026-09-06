@@ -17,6 +17,15 @@ class Version:
 
     _value: int
 
+    def __post_init__(self) -> None:
+        """Validate the version number, rejecting bool despite its int subclassing."""
+        if isinstance(self._value, bool) or not isinstance(  # type: ignore[reportUnnecessaryIsInstance]
+            self._value, int
+        ):
+            raise TypeError(f"Version must be int, got {type(self._value).__name__}")
+        if self._value < 0:
+            raise ValueError("Version must be non-negative")
+
     def to_primitive(self) -> int:
         """Convert to primitive int for persistence."""
         return self._value
@@ -29,13 +38,12 @@ class Version:
             value: The version number (must be non-negative integer)
 
         Returns:
-            Result containing Version or Exception
+            Result containing Version or a validation error.
         """
-        if not isinstance(value, int):  # type: ignore[reportUnnecessaryIsInstance]
-            return Err(TypeError(f"Version must be int, got {type(value).__name__}"))
-        if value < 0:
-            return Err(ValueError("Version must be non-negative"))
-        return Ok(cls(_value=value))
+        try:
+            return Ok(cls(_value=value))
+        except (TypeError, ValueError) as error:
+            return Err(error)
 
     def increment(self) -> Version:
         """Return new Version instance with incremented value.
