@@ -1,195 +1,155 @@
-"""Tests for ORM mapping registry with automatic conversion."""
+"""Tests for explicit ORM mapping registration and dispatch."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from typing import Any
 
 import pytest
-from flow_res import Ok, Result
-from sqlmodel import Field, SQLModel
+from sqlmodel import SQLModel
 
-from app.infrastructure.orm_mapping import (
-    ORMMappingRegistry,
-    entity_to_orm_dict,
-    orm_to_entity,
-    register_orm_mapping,
-)
-
-# Test fixtures
+from app.infrastructure.orm_mapping import ORMMappingRegistry, register_orm_mapping
 
 
 @dataclass(frozen=True)
-class DummyId:
-    """Dummy ID value object for testing."""
-
-    _value: str
-
-    def to_primitive(self) -> str:
-        return self._value
-
-    @classmethod
-    def from_primitive(cls, value: str) -> Result["DummyId", ValueError]:
-        return Ok(cls(_value=value))
-
-    @classmethod
-    def generate(cls) -> Result["DummyId", ValueError]:
-        return Ok(cls(_value="generated-id"))
-
-
-@dataclass(frozen=True)
-class DummyEmail:
-    """Dummy email value object for testing."""
-
-    _value: str
-
-    def to_primitive(self) -> str:
-        return self._value
-
-    @classmethod
-    def from_primitive(cls, value: str) -> Result["DummyEmail", ValueError]:
-        return Ok(cls(_value=value))
-
-
-class DummyORM(SQLModel, table=True):  # type: ignore[call-arg]
-    """Dummy ORM model for testing."""
-
-    __tablename__ = "dummies"  # type: ignore[reportAssignmentType]
-    id: str | None = Field(default=None, primary_key=True)
-    name: str
-    email: str
-    created_at: datetime
-
-
-@dataclass
 class Dummy:
-    """Dummy domain class for testing."""
+    """Domain fixture whose field differs from its persistence column."""
 
-    id: DummyId
     name: str
-    email: DummyEmail
-    created_at: datetime
 
 
-# Tests
+class DummyORM(SQLModel):
+    """Persistence fixture with an explicitly mapped column."""
+
+    stored_name: str
 
 
-def test_entity_to_orm_dict_converts_value_objects() -> None:
-    """Test that entity_to_orm_dict converts IValueObject fields to primitives."""
-    dummy = Dummy(
-        id=DummyId("test-id"),
-        name="Test Name",
-        email=DummyEmail("test@example.com"),
-        created_at=datetime.now(UTC),
+def dummy_to_orm(entity: Dummy) -> DummyORM:
+    """Map the domain name to its persistence column."""
+    return DummyORM(stored_name=entity.name)
+
+
+def dummy_from_orm(row: SQLModel) -> Dummy:
+    """Restore the domain name from its persistence column."""
+    assert isinstance(row, DummyORM)
+    return Dummy(name=row.stored_name)
+
+
+@pytest.fixture(autouse=True)
+def isolated_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep registration tests independent of application mappings."""
+    monkeypatch.setattr(ORMMappingRegistry, "_domain_to_orm", {})
+    monkeypatch.setattr(ORMMappingRegistry, "_to_orm", {})
+    monkeypatch.setattr(ORMMappingRegistry, "_from_orm", {})
+
+
+def test_explicit_mapping_round_trip() -> None:
+    """Registration selects both explicit converters despite different fields."""
+    register_orm_mapping(Dummy, DummyORM, dummy_to_orm, dummy_from_orm)
+    entity = Dummy(name="test")
+
+    row = ORMMappingRegistry.to_orm(entity)
+
+    assert ORMMappingRegistry.get_orm_type(Dummy) is DummyORM
+    assert isinstance(row, DummyORM)
+    assert row.stored_name == "test"
+    assert ORMMappingRegistry.from_orm(row) == entity
+
+
+def test_mapping_dictionary_is_a_copy() -> None:
+    """Changing the returned mapping dictionary cannot unregister a mapping."""
+    register_orm_mapping(Dummy, DummyORM, dummy_to_orm, dummy_from_orm)
+
+    mappings = ORMMappingRegistry.get_mapping_dict()
+    assert mappings == {Dummy: DummyORM}
+    mappings.clear()
+
+    assert ORMMappingRegistry.get_orm_type(Dummy) is DummyORM
+
+
+def test_unregistered_domain_raises_error() -> None:
+    """Unregistered domain types have no implicit conversion."""
+    assert ORMMappingRegistry.get_orm_type(Dummy) is None
+    with pytest.raises(ValueError, match="No ORM mapping registered.*Dummy"):
+        ORMMappingRegistry.to_orm(Dummy(name="test"))
+
+
+def test_unregistered_orm_raises_error() -> None:
+    """Unregistered persistence types have no implicit conversion."""
+    with pytest.raises(ValueError, match="No domain mapping registered.*DummyORM"):
+        ORMMappingRegistry.from_orm(DummyORM(stored_name="test"))
+
+
+@pytest.mark.parametrize("missing_mapper", ["to_orm", "from_orm"])
+def test_registration_requires_both_mappers(missing_mapper: str) -> None:
+    """Omitting either mapper fails before registering the pair."""
+    mappers: dict[str, Any] = {
+        "to_orm": dummy_to_orm,
+        "from_orm": dummy_from_orm,
+    }
+    del mappers[missing_mapper]
+
+    with pytest.raises(TypeError, match=missing_mapper):
+        register_orm_mapping(Dummy, DummyORM, **mappers)
+
+    assert ORMMappingRegistry.get_mapping_dict() == {}
+
+
+@pytest.mark.parametrize("invalid_mapper", ["to_orm", "from_orm"])
+@pytest.mark.parametrize("already_registered", [False, True])
+def test_invalid_registration_preserves_state(
+    invalid_mapper: str, already_registered: bool
+) -> None:
+    """Invalid converters cannot create or partially replace a registration."""
+    if already_registered:
+        register_orm_mapping(Dummy, DummyORM, dummy_to_orm, dummy_from_orm)
+
+    def replacement_to_orm(entity: Dummy) -> SQLModel:
+        return DummyORM(stored_name="replacement")
+
+    def replacement_from_orm(row: SQLModel) -> Dummy:
+        return Dummy(name="replacement")
+
+    mappers: dict[str, Any] = {
+        "to_orm": replacement_to_orm,
+        "from_orm": replacement_from_orm,
+    }
+    mappers[invalid_mapper] = None
+
+    with pytest.raises(TypeError, match="Both to_orm and from_orm must be callable"):
+        register_orm_mapping(Dummy, DummyORM, **mappers)
+
+    if already_registered:
+        entity = Dummy(name="original")
+        row = ORMMappingRegistry.to_orm(entity)
+        assert isinstance(row, DummyORM)
+        assert row.stored_name == "original"
+        assert ORMMappingRegistry.from_orm(row) == entity
+    else:
+        assert ORMMappingRegistry.get_mapping_dict() == {}
+        with pytest.raises(ValueError, match="No ORM mapping registered"):
+            ORMMappingRegistry.to_orm(Dummy(name="test"))
+        with pytest.raises(ValueError, match="No domain mapping registered"):
+            ORMMappingRegistry.from_orm(DummyORM(stored_name="test"))
+
+
+@pytest.mark.parametrize("direction", ["to_orm", "from_orm"])
+def test_mapper_errors_propagate(direction: str) -> None:
+    """Mapping failures reach the caller without conversion or suppression."""
+    failure = ValueError("invalid persisted value")
+
+    def fail(value: Any) -> Any:
+        raise failure
+
+    to_orm: Callable[[Any], SQLModel] = fail if direction == "to_orm" else dummy_to_orm
+    from_orm: Callable[[SQLModel], Any] = (
+        fail if direction == "from_orm" else dummy_from_orm
     )
+    register_orm_mapping(Dummy, DummyORM, to_orm, from_orm)
 
-    result = entity_to_orm_dict(dummy)
+    with pytest.raises(ValueError) as exc_info:
+        if direction == "to_orm":
+            ORMMappingRegistry.to_orm(Dummy(name="test"))
+        else:
+            ORMMappingRegistry.from_orm(DummyORM(stored_name="test"))
 
-    assert result["id"] == "test-id"
-    assert result["name"] == "Test Name"
-    assert result["email"] == "test@example.com"
-    assert isinstance(result["created_at"], datetime)
-
-
-def test_entity_to_orm_dict_raises_for_non_dataclass() -> None:
-    """Test that entity_to_orm_dict raises TypeError for non-dataclass."""
-
-    class NotADataclass:
-        pass
-
-    with pytest.raises(TypeError, match="Expected dataclass"):
-        entity_to_orm_dict(NotADataclass())
-
-
-def test_orm_to_entity_converts_to_value_objects() -> None:
-    """Test that orm_to_entity converts primitives to IValueObject instances."""
-    now = datetime.now(UTC)
-    orm = DummyORM(
-        id="test-id", name="Test Name", email="test@example.com", created_at=now
-    )
-
-    result = orm_to_entity(orm, Dummy)
-
-    assert isinstance(result, Dummy)
-    assert isinstance(result.id, DummyId)
-    assert result.id.to_primitive() == "test-id"
-    assert result.name == "Test Name"
-    assert isinstance(result.email, DummyEmail)
-    assert result.email.to_primitive() == "test@example.com"
-    assert result.created_at == now
-
-
-def test_orm_to_entity_generates_id_when_none() -> None:
-    """Test that orm_to_entity generates ID when ORM id is None."""
-    now = datetime.now(UTC)
-    orm = DummyORM(id=None, name="Test", email="test@example.com", created_at=now)
-
-    result = orm_to_entity(orm, Dummy)
-
-    assert isinstance(result.id, DummyId)
-    assert result.id.to_primitive() == "generated-id"
-
-
-def test_orm_to_entity_raises_for_non_dataclass() -> None:
-    """Test that orm_to_entity raises TypeError for non-dataclass."""
-    orm = DummyORM(
-        id="test", name="Test", email="test@example.com", created_at=datetime.now(UTC)
-    )
-
-    class NotADataclass:
-        pass
-
-    with pytest.raises(TypeError, match="Expected dataclass"):
-        orm_to_entity(orm, NotADataclass)  # type: ignore[arg-type]
-
-
-def test_register_orm_mapping() -> None:
-    """Test manual registration of domain-ORM mapping."""
-    register_orm_mapping(Dummy, DummyORM)
-    assert ORMMappingRegistry.get_orm_type(Dummy) == DummyORM
-
-
-def test_registry_to_orm_with_automatic_conversion() -> None:
-    """Test registry to_orm with automatic conversion."""
-    register_orm_mapping(Dummy, DummyORM)
-
-    dummy = Dummy(
-        id=DummyId("test-id"),
-        name="Test",
-        email=DummyEmail("test@example.com"),
-        created_at=datetime.now(UTC),
-    )
-
-    orm = ORMMappingRegistry.to_orm(dummy)
-
-    assert isinstance(orm, DummyORM)
-    assert orm.id == "test-id"
-    assert orm.name == "Test"
-    assert orm.email == "test@example.com"
-
-
-def test_registry_from_orm_with_automatic_conversion() -> None:
-    """Test registry from_orm with automatic conversion."""
-    register_orm_mapping(Dummy, DummyORM)
-
-    now = datetime.now(UTC)
-    orm = DummyORM(id="test-id", name="Test", email="test@example.com", created_at=now)
-
-    dummy = ORMMappingRegistry.from_orm(orm)
-
-    assert isinstance(dummy, Dummy)
-    assert isinstance(dummy.id, DummyId)
-    assert dummy.id.to_primitive() == "test-id"
-    assert isinstance(dummy.email, DummyEmail)
-    assert dummy.email.to_primitive() == "test@example.com"
-
-
-def test_unregistered_type_raises_error() -> None:
-    """Test that unregistered type raises ValueError."""
-
-    @dataclass
-    class UnregisteredDummy:
-        id: str
-
-    dummy = UnregisteredDummy(id="test")
-
-    with pytest.raises(ValueError, match="No ORM mapping registered"):
-        ORMMappingRegistry.to_orm(dummy)
+    assert exc_info.value is failure

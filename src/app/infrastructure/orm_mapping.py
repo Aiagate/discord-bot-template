@@ -1,218 +1,48 @@
-"""Automatic ORM mapping registry with decorator-based registration."""
+"""Registry for explicit domain-to-ORM mappings."""
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import fields, is_dataclass
-from typing import Any, ClassVar, TypeVar, cast, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar
 
-from flow_res import Result, is_err, is_ok
 from sqlmodel import SQLModel
-
-from app.domain.interfaces import IValueObject
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
-
-
-def entity_to_orm_dict(entity: Any) -> dict[str, Any]:
-    """Convert domain entity to dictionary for ORM model creation.
-
-    Automatically converts IValueObject fields to primitive types.
-
-    Args:
-        entity: Domain entity instance (must be a dataclass)
-
-    Returns:
-        Dictionary with primitive values suitable for ORM model
-
-    Raises:
-        TypeError: If entity is not a dataclass
-
-    Example:
-        >>> user = User(id=UserId(...), email=Email("test@example.com"), ...)
-        >>> entity_to_orm_dict(user)
-        {'id': '01ARZ3NDEK...', 'email': 'test@example.com', ...}
-    """
-    if not is_dataclass(entity):
-        raise TypeError(f"Expected dataclass, got {type(entity).__name__}")
-
-    result: dict[str, Any] = {}
-    for field in fields(entity):
-        field_value = getattr(entity, field.name)
-
-        if isinstance(field_value, IValueObject):
-            result[field.name] = field_value.to_primitive()
-        else:
-            result[field.name] = field_value
-
-    return result
-
-
-def _convert_orm_value_to_field_value(
-    orm_value: Any,
-    field_type: type,
-    field_name: str,
-) -> Any:
-    """Convert an ORM value to the appropriate field value.
-
-    Handles IValueObject conversion and Optional types.
-    """
-    # Check if the field type is Optional (Union with None)
-    origin = get_origin(field_type)
-    args = get_args(field_type)
-
-    # Check if it's a Union type and contains NoneType
-    is_optional = origin is not None and type(None) in args
-    actual_type = field_type
-
-    if is_optional:
-        # Extract the non-None type from Optional[T]
-        non_none_types = [arg for arg in args if arg is not type(None)]
-        if non_none_types:
-            actual_type = non_none_types[0]
-
-    # Check if the actual type implements IValueObject
-    if hasattr(actual_type, "from_primitive") and callable(actual_type.from_primitive):
-        # Special handling for None values
-        if orm_value is None:
-            if is_optional:
-                return None
-            elif field_name.lstrip("_") == "id" and hasattr(actual_type, "generate"):
-                # For non-Optional ID fields, generate a new ID
-                id_result = actual_type.generate()
-                if is_err(id_result):
-                    raise ValueError(f"Failed to generate ID: {id_result.error}")
-                assert is_ok(id_result)  # type: ignore[reportAssertType]
-                return id_result.unwrap()
-            else:
-                raise ValueError(
-                    f"Field '{field_name}' is None but "
-                    f"{actual_type.__name__} is not Optional and has no "
-                    f"generate() method"
-                )
-        else:
-            # Convert from primitive using from_primitive()
-            result = cast(Result[Any, Any], actual_type.from_primitive(orm_value))
-            if is_err(result):
-                raise ValueError(
-                    f"Failed to convert field '{field_name}' "
-                    f"from primitive: {result.error}"
-                )
-            assert is_ok(result)  # type: ignore[reportAssertType]
-            return result.unwrap()
-    else:
-        # Use primitive value as-is
-        return orm_value
-
-
-def orm_to_entity[T](orm_instance: SQLModel, entity_type: type[T]) -> T:
-    """Convert ORM model to domain entity.
-
-    Automatically converts primitive fields to IValueObject instances
-    based on type annotations.
-
-    For dataclasses with init=False fields, values are set directly using
-    object.__setattr__ after initial construction. Aggregates with private
-    fields use explicit mappers instead of this generic fallback.
-
-    Args:
-        orm_instance: ORM model instance
-        entity_type: Target domain entity class (must be a dataclass)
-
-    Returns:
-        Domain entity instance
-
-    Raises:
-        TypeError: If entity_type is not a dataclass
-        ValueError: If conversion fails
-
-    Example:
-        >>> user_orm = UserORM(id='01ARZ3NDEK...', email='test@example.com')
-        >>> user = orm_to_entity(user_orm, User)
-        >>> assert isinstance(user.id, UserId)
-        >>> assert isinstance(user.email, Email)
-    """
-    if not is_dataclass(entity_type):
-        raise TypeError(f"Expected dataclass, got {entity_type.__name__}")
-
-    # Get type hints from the entity class
-    type_hints = get_type_hints(entity_type)
-
-    init_kwargs: dict[str, Any] = {}
-    non_init_values: dict[str, Any] = {}
-
-    for field in fields(entity_type):
-        field_name = field.name
-        field_type = type_hints.get(field_name)
-
-        if field_type is None:
-            raise ValueError(
-                f"No type annotation found for field '{field_name}' "
-                f"in {entity_type.__name__}"
-            )
-
-        # Get the value from ORM instance
-        orm_value = getattr(orm_instance, field_name, None)
-
-        # Convert the value
-        converted_value = _convert_orm_value_to_field_value(
-            orm_value, field_type, field_name
-        )
-
-        # Separate init and non-init fields
-        if field.init:
-            init_kwargs[field_name] = converted_value
-        else:
-            non_init_values[field_name] = converted_value
-
-    # Create entity with init fields only
-    entity = entity_type(**init_kwargs)
-
-    # Set non-init fields directly (for init=False fields like Team._id)
-    for field_name, value in non_init_values.items():
-        object.__setattr__(entity, field_name, value)
-
-    return entity
-
 
 class ORMMappingRegistry:
-    """Registry for domain-to-ORM mapping with automatic conversion.
-
-    This class maintains bidirectional mappings between domain aggregates
-    and their corresponding ORM models, using automatic conversion based
-    on IValueObject protocol.
-    """
+    """Register and select explicit bidirectional domain-to-ORM mappers."""
 
     _domain_to_orm: ClassVar[dict[type, type[SQLModel]]] = {}
-    _custom_to_orm: ClassVar[dict[type, Callable[[Any], SQLModel]]] = {}
-    _custom_from_orm: ClassVar[dict[type[SQLModel], Callable[[SQLModel], Any]]] = {}
+    _to_orm: ClassVar[dict[type, Callable[[Any], SQLModel]]] = {}
+    _from_orm: ClassVar[dict[type[SQLModel], Callable[[SQLModel], Any]]] = {}
 
     @classmethod
     def register(
         cls,
         domain_type: type,
         orm_type: type[SQLModel],
-        to_orm: Callable[[Any], SQLModel] | None = None,
-        from_orm: Callable[[SQLModel], Any] | None = None,
+        to_orm: Callable[[Any], SQLModel],
+        from_orm: Callable[[SQLModel], Any],
     ) -> None:
         """Register a domain-ORM mapping pair.
 
         Args:
             domain_type: Domain aggregate class (e.g., User, Team)
             orm_type: ORM model class (e.g., UserORM, TeamORM)
+            to_orm: Explicit domain-to-ORM converter
+            from_orm: Explicit ORM-to-domain converter
+
+        Raises:
+            TypeError: If either converter is not callable
         """
+        if not callable(to_orm) or not callable(from_orm):
+            raise TypeError("Both to_orm and from_orm must be callable.")
+
         cls._domain_to_orm[domain_type] = orm_type
-        if to_orm is None:
-            cls._custom_to_orm.pop(domain_type, None)
-        else:
-            cls._custom_to_orm[domain_type] = to_orm
-        if from_orm is None:
-            cls._custom_from_orm.pop(orm_type, None)
-        else:
-            cls._custom_from_orm[orm_type] = from_orm
+        cls._to_orm[domain_type] = to_orm
+        cls._from_orm[orm_type] = from_orm
         logger.debug(
             f"Registered ORM mapping: {domain_type.__name__} <-> {orm_type.__name__}"
         )
@@ -231,7 +61,7 @@ class ORMMappingRegistry:
 
     @classmethod
     def to_orm(cls, domain_instance: Any) -> SQLModel:
-        """Convert domain instance to ORM model using automatic conversion.
+        """Convert domain instance to ORM model using its registered mapper.
 
         Args:
             domain_instance: Domain aggregate instance
@@ -243,23 +73,18 @@ class ORMMappingRegistry:
             ValueError: If domain type is not registered
         """
         domain_type = type(domain_instance)
-        orm_type = cls._domain_to_orm.get(domain_type)
+        mapper = cls._to_orm.get(domain_type)
 
-        if orm_type is None:
+        if mapper is None:
             raise ValueError(
                 f"No ORM mapping registered for domain type: {domain_type.__name__}"
             )
 
-        custom_mapper = cls._custom_to_orm.get(domain_type)
-        if custom_mapper is not None:
-            return custom_mapper(domain_instance)
-
-        orm_dict = entity_to_orm_dict(domain_instance)
-        return orm_type(**orm_dict)
+        return mapper(domain_instance)
 
     @classmethod
     def from_orm(cls, orm_instance: SQLModel) -> Any:
-        """Convert ORM model to domain instance using automatic conversion.
+        """Convert ORM model to domain instance using its registered mapper.
 
         Args:
             orm_instance: ORM model instance
@@ -270,20 +95,14 @@ class ORMMappingRegistry:
         Raises:
             ValueError: If ORM type is not registered
         """
-        custom_mapper = cls._custom_from_orm.get(type(orm_instance))
-        if custom_mapper is not None:
-            return custom_mapper(orm_instance)
-
-        # Find domain type by ORM type
         orm_type = type(orm_instance)
-        for domain_type, registered_orm_type in cls._domain_to_orm.items():
-            if registered_orm_type == orm_type:
-                # Use automatic conversion
-                return orm_to_entity(orm_instance, domain_type)
+        mapper = cls._from_orm.get(orm_type)
+        if mapper is None:
+            raise ValueError(
+                f"No domain mapping registered for ORM type: {orm_type.__name__}"
+            )
 
-        raise ValueError(
-            f"No domain mapping registered for ORM type: {orm_type.__name__}"
-        )
+        return mapper(orm_instance)
 
     @classmethod
     def get_mapping_dict(cls) -> dict[type, type[SQLModel]]:
@@ -298,21 +117,8 @@ class ORMMappingRegistry:
 def register_orm_mapping(
     domain_type: type,
     orm_type: type[SQLModel],
-    to_orm: Callable[[Any], SQLModel] | None = None,
-    from_orm: Callable[[SQLModel], Any] | None = None,
+    to_orm: Callable[[Any], SQLModel],
+    from_orm: Callable[[SQLModel], Any],
 ) -> None:
-    """Register ORM mapping for a domain type.
-
-    This is a convenience function for registering mappings without
-    needing to provide conversion functions (automatic conversion is used).
-
-    Args:
-        domain_type: Domain aggregate class
-        orm_type: ORM model class
-
-    Example:
-        >>> from app.domain.aggregates.user import User
-        >>> from app.infrastructure.orm_models.user_orm import UserORM
-        >>> register_orm_mapping(User, UserORM)
-    """
+    """Register a domain/ORM pair with both explicit conversion functions."""
     ORMMappingRegistry.register(domain_type, orm_type, to_orm, from_orm)

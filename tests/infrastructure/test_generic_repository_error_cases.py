@@ -97,6 +97,7 @@ async def test_generic_repository_add_sqlalchemy_error(uow: IUnitOfWork) -> None
 @pytest.mark.anyio
 async def test_generic_repository_delete_entity_without_id(
     session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test that delete returns error when entity has no id attribute."""
     from datetime import UTC, datetime
@@ -121,7 +122,26 @@ async def test_generic_repository_delete_entity_without_id(
         created_at: datetime
         updated_at: datetime
 
-    ORMMappingRegistry.register(EntityWithoutId, EntityWithoutIdORM)
+    def to_orm(entity: EntityWithoutId) -> SQLModel:
+        return EntityWithoutIdORM(
+            name=entity.name,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at,
+        )
+
+    def from_orm(row: SQLModel) -> EntityWithoutId:
+        assert isinstance(row, EntityWithoutIdORM)
+        return EntityWithoutId(
+            name=row.name,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    for attribute in ("_domain_to_orm", "_to_orm", "_from_orm"):
+        monkeypatch.setattr(
+            ORMMappingRegistry, attribute, getattr(ORMMappingRegistry, attribute).copy()
+        )
+    ORMMappingRegistry.register(EntityWithoutId, EntityWithoutIdORM, to_orm, from_orm)
 
     entity = EntityWithoutId(
         name="test", created_at=datetime.now(UTC), updated_at=datetime.now(UTC)
