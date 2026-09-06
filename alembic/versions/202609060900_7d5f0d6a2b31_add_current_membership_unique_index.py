@@ -22,27 +22,33 @@ _CURRENT_STATUSES = "'PENDING', 'ACTIVE'"
 
 
 def upgrade() -> None:
-    """Fail safely on duplicate current rows, then add the partial index."""
-    connection = op.get_bind()
-    duplicate_rows = connection.execute(
-        sa.text(
-            "SELECT team_id, user_id, COUNT(*) AS row_count "
-            "FROM team_memberships "
-            f"WHERE status IN ({_CURRENT_STATUSES}) "
-            "GROUP BY team_id, user_id "
-            "HAVING COUNT(*) > 1"
-        )
-    ).fetchall()
-    if duplicate_rows:
-        duplicates = "; ".join(
-            f"team_id={row[0]}, user_id={row[1]}, rows={row[2]}"
-            for row in duplicate_rows
-        )
-        raise RuntimeError(
-            "Cannot enforce one current membership period because duplicate "
-            f"rows exist: {duplicates}. Resolve them explicitly and rerun "
-            "the migration; no rows were deleted."
-        )
+    """Add the partial index after an online duplicate-row preflight.
+
+    Offline ``alembic upgrade --sql`` has no data connection, so it emits only
+    the index DDL. Applying that SQL still relies on the database to reject
+    duplicate rows; this migration never deletes or selects rows offline.
+    """
+    if not op.get_context().as_sql:
+        connection = op.get_bind()
+        duplicate_rows = connection.execute(
+            sa.text(
+                "SELECT team_id, user_id, COUNT(*) AS row_count "
+                "FROM team_memberships "
+                f"WHERE status IN ({_CURRENT_STATUSES}) "
+                "GROUP BY team_id, user_id "
+                "HAVING COUNT(*) > 1"
+            )
+        ).fetchall()
+        if duplicate_rows:
+            duplicates = "; ".join(
+                f"team_id={row[0]}, user_id={row[1]}, rows={row[2]}"
+                for row in duplicate_rows
+            )
+            raise RuntimeError(
+                "Cannot enforce one current membership period because duplicate "
+                f"rows exist: {duplicates}. Resolve them explicitly and rerun "
+                "the migration; no rows were deleted."
+            )
 
     op.create_index(
         _INDEX_NAME,
