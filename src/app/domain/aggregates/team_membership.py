@@ -129,6 +129,10 @@ class TeamMembership:
 
     def change_role(self, new_role: MembershipRole) -> TeamMembership:
         """Change the role of the member."""
+        if self._status is MembershipStatus.LEAVED:
+            raise MembershipTransitionError(
+                "Cannot change role for a LEAVED membership"
+            )
         self._role = new_role
         return self
 
@@ -150,5 +154,7 @@ class TeamMembership:
 
     def leave(self) -> TeamMembership:
         """User leaves the team."""
+        if self._status is MembershipStatus.LEAVED:
+            raise MembershipTransitionError("Membership is already in LEAVED status")
         self._status = MembershipStatus.LEAVED
         return self

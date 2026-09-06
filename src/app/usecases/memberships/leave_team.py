@@ -8,8 +8,11 @@ from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
 from app.contracts.ports import IUnitOfWork
-from app.domain.aggregates.team_membership import TeamMembership
-from app.domain.value_objects import MembershipId, MembershipStatus
+from app.domain.aggregates.team_membership import (
+    MembershipTransitionError,
+    TeamMembership,
+)
+from app.domain.value_objects import MembershipId
 from app.usecases.result import ErrorType, UseCaseError
 
 logger = logging.getLogger(__name__)
@@ -68,15 +71,15 @@ class LeaveTeamHandler(
 
             membership = membership_result.unwrap()
 
-            if membership.status == MembershipStatus.LEAVED:
+            try:
+                membership.leave()
+            except MembershipTransitionError as error:
                 return Err(
                     UseCaseError(
                         type=ErrorType.VALIDATION_ERROR,
-                        message="User has already leaved the team",
+                        message=str(error),
                     )
                 )
-
-            membership.leave()
 
             update_result = await membership_repo.update(membership)
             if is_err(update_result):
