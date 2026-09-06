@@ -488,7 +488,7 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
             return Err(RepositoryError(type=RepositoryErrorType.NOT_FOUND, ...))
 
         # ORM → Domain 自動変換
-        return Ok(ORMMappingRegistry.from_orm(orm_instance, self._entity_type))
+        return Ok(ORMMappingRegistry.from_orm(orm_instance))
 ```
 
 **ポイント**:
@@ -506,7 +506,7 @@ class GenericRepository[T, K](IRepositoryWithId[T, K]):
 
 ```python
 # registry_orm_mapping(DomainClass, ORMClass) でマッピングを登録
-# from_orm(orm_instance, domain_type) でORMからドメインへ変換
+# from_orm(orm_instance) で登録済みの明示マッパーを使ってORMからドメインへ変換
 # to_orm(domain_instance) でドメインからORMへ変換
 ```
 
@@ -720,7 +720,7 @@ class UsersCog(commands.Cog):
 ```python
 import pytest
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_user_with_empty_name_raises_error() -> None:
     with pytest.raises(ValueError, match="User name cannot be empty"):
         User(id=UserId.generate().unwrap(), name="", email=Email.from_primitive("a@a.com").unwrap())
@@ -734,7 +734,7 @@ async def test_create_user_with_empty_name_raises_error() -> None:
 import pytest
 from app.domain.value_objects import UserId, Email
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_get_user_handler(uow: IUnitOfWork) -> None:
     # Setup
     user = User(id=UserId.generate().unwrap(), name="Bob", email=Email.from_primitive("bob@a.com").unwrap())
