@@ -57,7 +57,7 @@ async def test_update_team_handler_not_found(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.NOT_FOUND
+    assert result.error.type == RepositoryErrorType.NOT_FOUND
 
 
 @pytest.mark.anyio
@@ -222,7 +222,7 @@ async def test_update_team_handler_get_unexpected_error() -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.UNEXPECTED
+    assert result.error.type == RepositoryErrorType.UNEXPECTED
     assert "Database connection failed" in result.error.message
 
 
@@ -261,8 +261,8 @@ async def test_update_team_handler_version_conflict_through_handler() -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.CONCURRENCY_CONFLICT
-    assert "modified by another user" in result.error.message
+    assert result.error.type == RepositoryErrorType.VERSION_CONFLICT
+    assert result.error.message == "Version conflict detected"
 
 
 @pytest.mark.anyio
@@ -300,7 +300,7 @@ async def test_update_team_handler_add_unexpected_error() -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.UNEXPECTED
+    assert result.error.type == RepositoryErrorType.UNEXPECTED
     assert "Database write failed" in result.error.message
 
 
@@ -347,5 +347,5 @@ async def test_update_team_handler_commit_failure() -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.UNEXPECTED
+    assert result.error.type == RepositoryErrorType.UNEXPECTED
     assert "Transaction commit failed" in result.error.message

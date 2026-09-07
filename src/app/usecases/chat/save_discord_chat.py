@@ -10,7 +10,11 @@ from injector import inject
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.chat_message import ChatMessage
 from app.domain.value_objects.message_content import MessageContent
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 
 @dataclass(frozen=True)
@@ -21,7 +25,7 @@ class SaveChatResult:
 
 
 @dataclass(frozen=True)
-class SaveDiscordChatCommand(Request[Result[SaveChatResult, UseCaseError]]):
+class SaveDiscordChatCommand(Request[Result[SaveChatResult, UseCaseResultError]]):
     """Command to persist a Discord message with its external occurrence time."""
 
     external_sender_id: str
@@ -32,7 +36,7 @@ class SaveDiscordChatCommand(Request[Result[SaveChatResult, UseCaseError]]):
 
 
 class SaveDiscordChatHandler(
-    RequestHandler[SaveDiscordChatCommand, Result[SaveChatResult, UseCaseError]]
+    RequestHandler[SaveDiscordChatCommand, Result[SaveChatResult, UseCaseResultError]]
 ):
     """Handle SaveChatCommand."""
 
@@ -45,7 +49,7 @@ class SaveDiscordChatHandler(
 
     async def handle(
         self, request: SaveDiscordChatCommand
-    ) -> Result[SaveChatResult, UseCaseError]:
+    ) -> Result[SaveChatResult, UseCaseResultError]:
         """Persist an incoming Discord message."""
         try:
             message = ChatMessage.create_discord(
@@ -64,20 +68,10 @@ class SaveDiscordChatHandler(
             repository = self._uow.GetRepository(ChatMessage)
             add_result = await repository.add(message)
             if is_err(add_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED,
-                        message="Failed to save chat message",
-                    )
-                )
+                return Err(add_result.error)
 
             commit_result = await self._uow.commit()
             if is_err(commit_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED,
-                        message="Failed to persist chat message",
-                    )
-                )
+                return Err(commit_result.error)
 
             return Ok(SaveChatResult(id=add_result.value.id.to_primitive()))

@@ -5,8 +5,8 @@ from flow_res import is_err, is_ok
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.team import Team
+from app.domain.repositories import RepositoryErrorType
 from app.domain.value_objects import TeamName
-from app.usecases.result import ErrorType
 from app.usecases.teams.get_team import GetTeamHandler, GetTeamQuery
 
 
@@ -48,4 +48,4 @@ async def test_get_team_handler_not_found(uow: IUnitOfWork) -> None:
     result = await handler.handle(query)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.NOT_FOUND
+    assert result.error.type == RepositoryErrorType.NOT_FOUND

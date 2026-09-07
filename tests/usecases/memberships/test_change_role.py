@@ -7,6 +7,7 @@ from flow_res import is_err
 from ulid import ULID
 
 from app.contracts.ports import IUnitOfWork
+from app.domain.repositories import RepositoryErrorType
 from app.usecases.memberships.change_role import (
     ChangeRoleCommand,
     ChangeRoleHandler,
@@ -55,8 +56,8 @@ async def test_change_role_not_found(uow: IUnitOfWork) -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.NOT_FOUND
-    assert result.error.message == "Membership not found"
+    assert result.error.type == RepositoryErrorType.NOT_FOUND
+    assert "not found" in result.error.message
 
 
 @pytest.mark.anyio

@@ -4,13 +4,17 @@ import logging
 from dataclasses import dataclass
 
 from flow_med import Request, RequestHandler
-from flow_res import Ok, Result, is_err
+from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.user import User
 from app.domain.value_objects import UserId
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +29,15 @@ class GetUserResult:
 
 
 @dataclass(frozen=True)
-class GetUserQuery(Request[Result[GetUserResult, UseCaseError]]):
+class GetUserQuery(Request[Result[GetUserResult, UseCaseResultError]]):
     """Query to get user by ID."""
 
     user_id: str
 
 
-class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseError]]):
+class GetUserHandler(
+    RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseResultError]]
+):
     """Handler for GetUser query."""
 
     @inject
@@ -40,7 +46,7 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
 
     async def handle(
         self, request: GetUserQuery
-    ) -> Result[GetUserResult, UseCaseError]:
+    ) -> Result[GetUserResult, UseCaseResultError]:
         """Get user by ID, returning a flattened result."""
         user_id_result = UserId.from_primitive(request.user_id).map_err(
             lambda _: UseCaseError(
@@ -49,18 +55,16 @@ class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseE
             )
         )
         if is_err(user_id_result):
-            return user_id_result
+            return Err(user_id_result.error)
 
         user_id = user_id_result.unwrap()
 
         async with self._uow:
             user_repo = self._uow.GetRepository(User, UserId)
-            user_result = (await user_repo.get_by_id(user_id)).map_err(
-                lambda e: UseCaseError(type=ErrorType.NOT_FOUND, message=e.message)
-            )
+            user_result = await user_repo.get_by_id(user_id)
 
             if is_err(user_result):
-                return user_result
+                return Err(user_result.error)
 
             user = user_result.unwrap()
             return Ok(

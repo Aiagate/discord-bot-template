@@ -175,9 +175,10 @@ Domainから独立した `src/app/contracts/ports/` のApplicationポートで�
 アプリケーション固有のエラー型は
 [src/app/usecases/result.py](../src/app/usecases/result.py) に定義しています。
 
-各Handlerの戻り値は `Result[出力DTO, UseCaseError]` です。
-Handlerは入力検証、ドメイン上のエラー、リポジトリのエラーを
-`UseCaseError` に変換して返します。
+各Handlerの戻り値は `Result[出力DTO, UseCaseResultError]` です。
+`UseCaseResultError` は `RepositoryError | UseCaseError` の型エイリアスであり、
+Handlerはリポジトリのエラーをそのまま返し、入力検証やドメイン上のエラーだけを
+`UseCaseError` に変換します。
 
 `Result` のチェーンは、Handlerを呼び出すプレゼンテーション側で利用できます。
 実際の呼び出し方は
@@ -207,9 +208,9 @@ Handlerは入力検証、ドメイン上のエラー、リポジトリのエラ�
 Handlerの契約は次のとおりです。
 
 - `Request` は文字列などの外部入力を受け取ります。
-- Handlerは `Result[ResultDTO, UseCaseError]` を返します。
+- Handlerは `Result[ResultDTO, UseCaseResultError]` を返します。
 - 入力検証やドメイン上の失敗は `UseCaseError` に変換します。
-- RepositoryやUnit of Workの失敗も `UseCaseError` に変換します。
+- RepositoryやUnit of Workの失敗は、`RepositoryError` のまま返します。
 - Create/Updateの結果は識別子を返し、必要な詳細情報はQueryで取得します。
 
 この契約により、ドメイン固有の処理はUse Case層に閉じ、プレゼンテーション層は
@@ -220,8 +221,8 @@ Handlerの契約は次のとおりです。
 内部のディスパッチには `flow-med` を使用しますが、外部インターフェースが直接
 利用するのは
 [ApplicationMediator](../src/app/application/mediator.py) です。
-`ApplicationMediator.send_async` はインスタンスメソッドで、Handlerへリクエストを
-ディスパッチします。
+`ApplicationMediator.send_async` はインスタンスメソッドで、Handlerの結果を返す前に
+`classify_error` を一度だけ適用します。
 
 Handlerの登録は
 [`_HANDLER_TYPES`](../src/app/application/mediator.py) に明示し、
@@ -453,8 +454,8 @@ class MyBot(commands.Bot):
         await self.add_cog(UsersCog(self, self.mediator))
 ```
 
-DIコンテナは `ApplicationMediator` を生成し、Handler一覧の登録をアプリケーション
-起動時に構成します。各Cogには同じMediatorインスタンスを渡します。
+DIコンテナは `ApplicationMediator` を生成し、Handler一覧の登録とエラー分類を
+アプリケーション起動時に構成します。各Cogには同じMediatorインスタンスを渡します。
 
 ##### 4.2 Discord Cogs
 
@@ -474,7 +475,7 @@ await ctx.send(content=message)
 
 - `ApplicationMediator` 経由でユースケースを呼び出し
 - `Result` 型で成功と失敗を扱う
-- エラー表示には `UseCaseError.message` を使う
+- エラー表示には `UseCaseError.display_message` を使う
 - Discord用のメッセージフォーマット
 - IDは文字列として受け取る
 

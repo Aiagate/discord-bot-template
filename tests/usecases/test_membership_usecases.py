@@ -6,6 +6,7 @@ import pytest
 from flow_res import is_err, is_ok
 
 from app.contracts.ports import IUnitOfWork
+from app.domain.repositories import RepositoryErrorType
 from app.usecases.memberships.approve_join_request import (
     ApproveJoinRequestCommand,
     ApproveJoinRequestHandler,
@@ -76,7 +77,7 @@ async def test_join_team_not_found(uow: IUnitOfWork, event_bus: AsyncMock) -> No
         JoinTeamCommand(team_id=dummy_team_id, user_id=dummy_user_id)
     )
     assert is_err(res2)
-    assert res2.error.type == ErrorType.NOT_FOUND
+    assert res2.error.type == RepositoryErrorType.NOT_FOUND
 
 
 @pytest.mark.anyio

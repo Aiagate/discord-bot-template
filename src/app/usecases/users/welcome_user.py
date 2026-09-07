@@ -10,20 +10,20 @@ from injector import inject
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.user import User
 from app.domain.value_objects import UserId
-from app.usecases.result import UseCaseError
+from app.usecases.result import UseCaseResultError
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class WelcomeUserCommand(Request[Result[None, UseCaseError]]):
+class WelcomeUserCommand(Request[Result[None, UseCaseResultError]]):
     """Command to send welcome notification to user."""
 
     user_id: str
 
 
 class WelcomeUserHandler(
-    RequestHandler[WelcomeUserCommand, Result[None, UseCaseError]]
+    RequestHandler[WelcomeUserCommand, Result[None, UseCaseResultError]]
 ):
     """Handler for WelcomeUser background task."""
 
@@ -31,7 +31,9 @@ class WelcomeUserHandler(
     def __init__(self, uow: IUnitOfWork) -> None:
         self._uow = uow
 
-    async def handle(self, request: WelcomeUserCommand) -> Result[None, UseCaseError]:
+    async def handle(
+        self, request: WelcomeUserCommand
+    ) -> Result[None, UseCaseResultError]:
         """Simulate sending a welcome notification."""
         user_id_result = UserId.from_primitive(request.user_id)
         if is_err(user_id_result):
