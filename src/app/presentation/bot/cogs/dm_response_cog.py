@@ -2,9 +2,9 @@
 
 import discord
 from discord.ext import commands
-from flow_med import Mediator
 from flow_res import is_err
 
+from app.application.mediator import ApplicationMediator
 from app.presentation.bot.cogs.base_cog import BaseCog
 from app.usecases.chat.save_discord_chat import SaveDiscordChatCommand
 
@@ -12,8 +12,8 @@ from app.usecases.chat.save_discord_chat import SaveDiscordChatCommand
 class DirectMessageResponseCog(BaseCog, name="DM Response"):
     """Cog to handle automated responses to direct messages."""
 
-    def __init__(self, bot: commands.Bot) -> None:
-        super().__init__(bot)
+    def __init__(self, bot: commands.Bot, mediator: ApplicationMediator) -> None:
+        super().__init__(bot, mediator)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -27,7 +27,7 @@ class DirectMessageResponseCog(BaseCog, name="DM Response"):
         guild_id = "DM"
         channel_id = str(message.channel.id)
 
-        save_result = await Mediator.send_async(
+        save_result = await self.mediator.send_async(
             SaveDiscordChatCommand(
                 external_sender_id=str(message.author.id),
                 guild_id=guild_id,

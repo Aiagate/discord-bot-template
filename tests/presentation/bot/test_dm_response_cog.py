@@ -10,6 +10,7 @@ import pytest
 from discord.ext import commands
 from flow_res import Ok
 
+from app.application.mediator import ApplicationMediator
 from app.presentation.bot.cogs import dm_response_cog
 from app.usecases.chat.save_discord_chat import SaveDiscordChatCommand
 
@@ -44,11 +45,14 @@ async def test_on_message_passes_discord_created_at_unchanged(
         ),
     )
     send_async = AsyncMock(return_value=Ok(None))
+    mediator = cast(
+        ApplicationMediator,
+        SimpleNamespace(send_async=send_async),
+    )
 
     monkeypatch.setattr(dm_response_cog.discord, "DMChannel", _FakeDMChannel)
-    monkeypatch.setattr(dm_response_cog.Mediator, "send_async", send_async)
 
-    await dm_response_cog.DirectMessageResponseCog(bot).on_message(message)
+    await dm_response_cog.DirectMessageResponseCog(bot, mediator).on_message(message)
 
     send_async.assert_awaited_once()
     await_args = send_async.await_args

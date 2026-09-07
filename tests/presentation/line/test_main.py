@@ -3,11 +3,13 @@
 from datetime import UTC, datetime
 from importlib import import_module
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from flow_res import Err, Ok
 
+from app.application.mediator import ApplicationMediator
 from app.usecases.result import ErrorType, UseCaseError
 
 
@@ -73,23 +75,32 @@ async def test_handle_callback_saves_message(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(line_main, "TextMessageContent", FakeTextMessageContent)
     monkeypatch.setattr(line_main, "UserSource", FakeUserSource)
     monkeypatch.setattr(line_main.parser, "parse", Mock(return_value=[fake_event]))
-    monkeypatch.setattr(
-        line_main.Mediator, "send_async", AsyncMock(return_value=Ok(None))
+    send_async = AsyncMock(return_value=Ok(None))
+    mediator = cast(
+        ApplicationMediator,
+        SimpleNamespace(send_async=send_async),
     )
 
     line_bot_api = AsyncMock()
     request = SimpleNamespace(
         headers={"X-Line-Signature": "signature"},
         body=AsyncMock(return_value=b"body"),
-        app=SimpleNamespace(state=SimpleNamespace(line_bot_api=line_bot_api)),
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                line_bot_api=line_bot_api,
+                mediator=mediator,
+            )
+        ),
     )
 
     result = await line_main.handle_callback(request)
 
     assert result == "OK"
     line_bot_api.reply_message.assert_not_awaited()
-    line_main.Mediator.send_async.assert_awaited_once()
-    command = line_main.Mediator.send_async.await_args.args[0]
+    send_async.assert_awaited_once()
+    await_args = send_async.await_args
+    assert await_args is not None
+    command = await_args.args[0]
     assert command.occurred_at == datetime(
         2023,
         11,
@@ -145,24 +156,29 @@ async def test_handle_callback_replies_on_save_error(
     monkeypatch.setattr(line_main, "TextMessageContent", FakeTextMessageContent)
     monkeypatch.setattr(line_main, "UserSource", FakeUserSource)
     monkeypatch.setattr(line_main.parser, "parse", Mock(return_value=[fake_event]))
-    monkeypatch.setattr(
-        line_main.Mediator,
-        "send_async",
-        AsyncMock(
-            return_value=Err(
-                UseCaseError(
-                    type=ErrorType.UNEXPECTED,
-                    message="save failed",
-                )
+    send_async = AsyncMock(
+        return_value=Err(
+            UseCaseError(
+                type=ErrorType.UNEXPECTED,
+                message="save failed",
             )
         ),
+    )
+    mediator = cast(
+        ApplicationMediator,
+        SimpleNamespace(send_async=send_async),
     )
 
     line_bot_api = AsyncMock()
     request = SimpleNamespace(
         headers={"X-Line-Signature": "signature"},
         body=AsyncMock(return_value=b"body"),
-        app=SimpleNamespace(state=SimpleNamespace(line_bot_api=line_bot_api)),
+        app=SimpleNamespace(
+            state=SimpleNamespace(
+                line_bot_api=line_bot_api,
+                mediator=mediator,
+            )
+        ),
     )
 
     result = await line_main.handle_callback(request)

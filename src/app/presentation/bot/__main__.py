@@ -6,9 +6,9 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from flow_med import Mediator
 from injector import Injector
 
+from app.application.mediator import ApplicationMediator
 from app.infrastructure.database import init_db
 from app.presentation.bot.cogs.dm_response_cog import DirectMessageResponseCog
 from app.presentation.bot.cogs.memberships_cog import MembershipsCog
@@ -18,6 +18,7 @@ from app.presentation.bot.cogs.users_cog import UsersCog
 
 class MyBot(commands.Bot):
     injector: Injector
+    mediator: ApplicationMediator
 
     def __init__(self, command_prefix: str = "!") -> None:
         super().__init__(
@@ -39,13 +40,14 @@ class MyBot(commands.Bot):
         # Initialize Mediator with dependency injection container
         injector = Injector([container.configure])
         self.injector = injector
-        Mediator.initialize(injector)
+        self.mediator = injector.get(ApplicationMediator)
 
     async def load_cogs(self) -> None:
-        await self.add_cog(TeamsCog(self))
-        await self.add_cog(UsersCog(self))
-        await self.add_cog(MembershipsCog(self))
-        await self.add_cog(DirectMessageResponseCog(self))
+        mediator = self.mediator
+        await self.add_cog(TeamsCog(self, mediator))
+        await self.add_cog(UsersCog(self, mediator))
+        await self.add_cog(MembershipsCog(self, mediator))
+        await self.add_cog(DirectMessageResponseCog(self, mediator))
 
 
 def load_environment() -> None:

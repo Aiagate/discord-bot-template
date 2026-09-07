@@ -3,7 +3,6 @@
 # pyright: reportUnknownLambdaType=false
 
 from discord.ext import commands
-from flow_med import Mediator
 
 from app.presentation.bot.cogs.base_cog import BaseCog
 from app.usecases.memberships.approve_join_request import ApproveJoinRequestCommand
@@ -29,7 +28,9 @@ class MembershipsCog(BaseCog, name="Memberships"):
     ) -> None:
         """Approve a join request. Usage: !memberships approve <membership_id>"""
         message = await (
-            Mediator.send_async(ApproveJoinRequestCommand(membership_id=membership_id))
+            self.mediator.send_async(
+                ApproveJoinRequestCommand(membership_id=membership_id)
+            )
             .map(
                 lambda value: (
                     f"Membership Approved:\nID: {value.id}\nStatus: {value.status}"
@@ -47,7 +48,7 @@ class MembershipsCog(BaseCog, name="Memberships"):
     ) -> None:
         """Leave a team. Usage: !memberships leave <membership_id>"""
         message = await (
-            Mediator.send_async(LeaveTeamCommand(membership_id=membership_id))
+            self.mediator.send_async(LeaveTeamCommand(membership_id=membership_id))
             .map(
                 lambda value: (f"Leaved Team:\nID: {value.id}\nStatus: {value.status}")
             )
@@ -64,7 +65,7 @@ class MembershipsCog(BaseCog, name="Memberships"):
     ) -> None:
         """Change member role. Usage: !memberships role <membership_id> <role>"""
         message = await (
-            Mediator.send_async(
+            self.mediator.send_async(
                 ChangeRoleCommand(membership_id=membership_id, new_role=new_role)
             )
             .map(

@@ -20,11 +20,12 @@
 ┌─────────────────────────────────────────────┐
 │  Presentation Layer                         │  外部インターフェース
 │  (Discord Bot, Cogs)                        │  - ユーザーからの入力受付
-│  - src/app/__main__.py                      │  - 出力のフォーマット
+│  - src/app/presentation/bot/__main__.py      │  - 出力のフォーマット
 │  - src/app/presentation/bot/cogs/*.py       │
 ├─────────────────────────────────────────────┤
 │  Application Layer                          │  ユースケース
 │  (Use Cases, Mediator)                      │  - ビジネスフロー制御
+│  - src/app/application/                     │  - Mediatorの構成
 │  - src/app/usecases/                        │  - DTOでの入出力
 │  - flow-med (External Library)              │  - Result型でのエラーハンドリング
 ├─────────────────────────────────────────────┤
@@ -170,39 +171,18 @@ Domainから独立した `src/app/contracts/ports/` のApplicationポートで�
 
 ##### 1.3 Result Type（結果型）
 
-`src/app/core/result.py`:
+`Result`、`Ok`、`Err`、`AwaitableResult` は `flow_res` が提供します。
+アプリケーション固有のエラー型は
+[src/app/usecases/result.py](../src/app/usecases/result.py) に定義しています。
 
-```python
-@dataclass(frozen=True)
-class Ok[T]:
-    """成功結果"""
-    value: T
+各Handlerの戻り値は `Result[出力DTO, UseCaseError]` です。
+Handlerは入力検証、ドメイン上のエラー、リポジトリのエラーを
+`UseCaseError` に変換して返します。
 
-@dataclass(frozen=True)
-class Err[E]:
-    """失敗結果"""
-    error: E
-
-Result = Ok[T] | Err[E]
-```
-
-**ポイント**:
-
-- Rust の Result型にインスパイア
-- 例外ではなく値でエラーを表現
-- `map`, `and_then`, `unwrap` などのメソッドチェーンで安全な処理を実現
-
-**使用例**:
-
-```python
-# teams_cog.py の例
-message = await (
-    Mediator.send_async(CreateTeamCommand(name=name))
-    .and_then(lambda r: Mediator.send_async(GetTeamQuery(r.team_id)))
-    .map(lambda v: f"Team Created: ID: {v.team.id}, Name: {v.team.name}")
-    .unwrap()
-)
-```
+`Result` のチェーンは、Handlerを呼び出すプレゼンテーション側で利用できます。
+実際の呼び出し方は
+[src/app/presentation/bot/cogs/teams_cog.py](../src/app/presentation/bot/cogs/teams_cog.py)
+を参照してください。
 
 ---
 
@@ -220,200 +200,49 @@ message = await (
 
 ##### 2.1 Use Cases（ユースケース）
 
-各ユースケースは以下の3要素で構成:
+各ユースケースのリクエスト、結果DTO、Handlerは、ユースケースごとのモジュールに
+まとめます。たとえば、[GetUserの実装](../src/app/usecases/users/get_user.py) と
+[CreateUserの実装](../src/app/usecases/users/create_user.py) を参照してください。
 
-1. **Query/Command クラス**: リクエスト
-2. **Result クラス**: レスポンス
-3. **Handler クラス**: 処理ロジック
+Handlerの契約は次のとおりです。
 
-**重要な設計原則**: Create系のユースケースは作成したエンティティのIDのみを返し、詳細情報の取得はGet系のユースケースに委譲します。これにより以下のSOLID原則がより厳密に守られます：
+- `Request` は文字列などの外部入力を受け取ります。
+- Handlerは `Result[ResultDTO, UseCaseError]` を返します。
+- 入力検証やドメイン上の失敗は `UseCaseError` に変換します。
+- RepositoryやUnit of Workの失敗も `UseCaseError` に変換します。
+- Create/Updateの結果は識別子を返し、必要な詳細情報はQueryで取得します。
 
-- **単一責任の原則（SRP）**: Createは「エンティティの作成」、Getは「エンティティの詳細取得」という明確な単一責任を持つ
-- **開放閉鎖の原則（OCP）**: 表示ロジックをGetに一元化することで、表示形式の変更時に既存のCreateコードを変更する必要がない
-- **インターフェース分離の原則（ISP）**: Createは最小限の情報（ID）のみを返し、クライアントに不要な情報を公開しない
-
-`src/app/usecases/users/get_user.py`:
-
-```python
-# 1. Query（リクエスト）- IDはstringで受け取る
-class GetUserQuery(Request[Result[GetUserResult, UseCaseError]]):
-    def __init__(self, user_id: str) -> None:
-        self.user_id = user_id
-
-# 2. Result（レスポンス）
-class GetUserResult:
-    def __init__(self, user: UserDTO) -> None:
-        self.user = user
-
-# 3. Handler（処理ロジック）
-class GetUserHandler(RequestHandler[GetUserQuery, Result[GetUserResult, UseCaseError]]):
-    @inject
-    def __init__(self, uow: IUnitOfWork) -> None:
-        self._uow = uow
-
-    async def handle(self, request: GetUserQuery) -> Result[GetUserResult, UseCaseError]:
-        # 文字列からValue Objectへの変換
-        user_id_result = UserId.from_primitive(request.user_id)
-        if is_err(user_id_result):
-            return Err(UseCaseError(type=ErrorType.VALIDATION_ERROR, ...))
-
-        user_id = user_id_result.unwrap()
-
-        async with self._uow:
-            # リポジトリにはValue Objectでアクセス
-            user_repo = self._uow.GetRepository(User, UserId)
-            user_result = await user_repo.get_by_id(user_id)
-
-            match user_result:
-                case Ok(user):
-                    # Domain -> DTO への変換
-                    user_dto = UserDTO(
-                        id=user.id.to_primitive(),
-                        name=user.name,
-                        email=user.email.to_primitive()
-                    )
-                    return Ok(GetUserResult(user_dto))
-                case Err(repo_error):
-                    return Err(UseCaseError.from_repo_error(repo_error))
-
-```
-
-**ポイント**:
-
-- **CQRS パターン**: Query（読み取り）と Command（書き込み）を分離
-- **DTO（Data Transfer Object）**: プレゼンテーション層との境界
-- **依存性注入**: `@inject` デコレータで IUnitOfWork を注入
-- **トランザクション**: `async with self._uow` でトランザクション管理
-- **入力バリデーション**: Handler内で文字列をValue Objectに変換し、不正な値を弾く
-
-`src/app/usecases/users/create_user.py` (Command例):
-
-```python
-# 1. Command（リクエスト）
-class CreateUserCommand(Request[Result[CreateUserResult, UseCaseError]]):
-    def __init__(self, name: str, email: str) -> None:
-        self.name = name
-        self.email = email
-
-# 2. Result（レスポンス）- IDのみを返す
-class CreateUserResult:
-    def __init__(self, user_id: str) -> None:
-        self.user_id = user_id
-
-# 3. Handler（処理ロジック）
-class CreateUserHandler(RequestHandler[CreateUserCommand, Result[CreateUserResult, UseCaseError]]):
-    @inject
-    def __init__(self, uow: IUnitOfWork) -> None:
-        self._uow = uow
-
-    async def handle(self, request: CreateUserCommand) -> Result[CreateUserResult, UseCaseError]:
-        # Value Objectの生成とドメインルールの検証
-        user_result = Ok(User(
-            id=UserId.generate().unwrap(),
-            name=request.name,
-            email=Email.from_primitive(request.email).unwrap()
-        ))
-
-        if is_err(user_result):
-            return Err(UseCaseError(...)) # エラー処理
-
-        user = user_result.unwrap()
-
-        async with self._uow:
-            user_repo = self._uow.GetRepository(User)
-            save_result = await user_repo.add(user)
-
-            match save_result:
-                case Ok(saved_user):
-                    # IDのみを文字列で返す
-                    return Ok(CreateUserResult(saved_user.id.to_primitive()))
-                case Err(repo_error):
-                    return Err(UseCaseError.from_repo_error(repo_error))
-```
-
-**Createの設計パターン**: CreateユースケースはIDのみを返します。プレゼンテーション層（Cog）では、返されたIDを使ってGetユースケースを呼び出すことで、詳細情報を取得します。このフローは `Result` 型の `and_then` メソッドを使うことで、よりクリーンに実装できます。
-
-```python
-# src/app/presentation/bot/cogs/teams_cog.py
-@teams.command(name="create")
-async def teams_create(self, ctx: commands.Context[commands.Bot], name: str) -> None:
-    """Create new team. Usage: !teams create <name>"""
-    message = await (
-        # 1. Createを実行してIDを取得
-        Mediator.send_async(CreateTeamCommand(name=name))
-        # 2. 成功すれば、返されたIDでGetを実行
-        .and_then(
-            lambda result: Mediator.send_async(GetTeamQuery(result.team_id))
-        )
-        # 3. Getの成功結果をメッセージにフォーマット
-        .map(
-            lambda value: (
-                f"Team Created:\nID: {value.team.id}\nName: {value.team.name}"
-            )
-        )
-        # 4. 最終的な結果 (成功メッセージ or エラー) を取り出す
-        .unwrap()
-    )
-    await ctx.send(content=message)
-```
-
-この設計により：
-
-- Createは「作成してIDを返す」という単一責任に専念
-- Getは「詳細情報の取得と形式化」という単一責任に専念
-- 結果の表示形式を変更する場合、Getの実装のみを変更すればよい（OCP）
-- `and_then`でフローが明確になり、ネストが深くならない
+この契約により、ドメイン固有の処理はUse Case層に閉じ、プレゼンテーション層は
+結果の表示だけを担当できます。
 
 ##### 2.2 Mediator Pattern（メディエーターパターン）
 
-`flow-med` ライブラリを使用しています。
+内部のディスパッチには `flow-med` を使用しますが、外部インターフェースが直接
+利用するのは
+[ApplicationMediator](../src/app/application/mediator.py) です。
+`ApplicationMediator.send_async` はインスタンスメソッドで、Handlerへリクエストを
+ディスパッチします。
+
+Handlerの登録は
+[`_HANDLER_TYPES`](../src/app/application/mediator.py) に明示し、
+`create_application_mediator` が `HandlerRegistry` へ登録してからMediatorを構築します。
+新しいHandlerを追加した場合は、この一覧に追加してください。
 
 ```python
-class Mediator:
-    """CQRS-style mediator for request/response."""
-
-    @classmethod
-    async def send_async[T, E: Exception](
-        cls, request: Request[Result[T, E]]
-    ) -> AwaitableResult[T, E]:
-        """Send request to handler and get response."""
-        # ...
+mediator: ApplicationMediator
+result = await mediator.send_async(GetUserQuery(user_id="01H...Z"))
 ```
 
-**利点**:
-
-- プレゼンテーション層とアプリケーション層の疎結合
-- ハンドラーの自動登録（`__init_subclass__` 使用）
-- 一貫したリクエスト/レスポンスパターン
-- `AwaitableResult` によるメソッドチェーンのサポート
-
-**使用例**:
-
-```python
-# Discord Cog から
-query = GetUserQuery(user_id="01H...Z")
-result = await Mediator.send_async(query)
-```
+Presentation層はBot、API、Workerのいずれも同じ `ApplicationMediator` をDIで受け取り、
+そのインスタンスメソッドだけを呼び出します。
 
 ##### 2.3 DTOs（Data Transfer Objects）
 
-`src/app/usecases/users/user_dto.py`:
-
-```python
-@dataclass(frozen=True)
-class UserDTO:
-    """User Data Transfer Object."""
-    id: str  # ULID
-    name: str
-    email: str
-```
-
-**ポイント**:
-
-- イミュータブル（`frozen=True`）
-- ドメイン集約とは別物（表示用）
-- プレゼンテーション層に公開する情報はプリミティブ型（`str`, `int`など）
-- Value Objectは `to_primitive()` で変換されて格納される
+Result DTOは共有DTOモジュールに集約せず、各ユースケースのモジュールで定義します。
+たとえば `GetUserResult` と `CreateUserResult` は
+[usersのユースケース](../src/app/usecases/users/) にあります。
+DTOはドメイン集約をそのまま公開せず、プレゼンテーションに必要なプリミティブ値を
+返します。
 
 ---
 
@@ -607,60 +436,45 @@ class AppModule(Module):
 
 ##### 4.1 Discord Bot Entry Point
 
-`src/app/__main__.py`:
+[`src/app/presentation/bot/__main__.py`](../src/app/presentation/bot/__main__.py):
 
 ```python
 class MyBot(commands.Bot):
-    # ...
     async def setup_hook(self) -> None:
         await self._init_database()
         await self.load_cogs()
 
     async def _init_database(self) -> None:
-        # ... DIコンテナとMediatorの初期化
         injector = Injector([container.configure])
-        Mediator.initialize(injector)
+        self.mediator = injector.get(ApplicationMediator)
 
     async def load_cogs(self) -> None:
-        # Cogモジュールをインポートしてロード
-        await self.load_extension(teams_cog.__name__)
-        await self.load_extension(users_cog.__name__)
-
-bot = MyBot()
-bot.run(token)
+        await self.add_cog(TeamsCog(self, self.mediator))
+        await self.add_cog(UsersCog(self, self.mediator))
 ```
+
+DIコンテナは `ApplicationMediator` を生成し、Handler一覧の登録をアプリケーション
+起動時に構成します。各Cogには同じMediatorインスタンスを渡します。
 
 ##### 4.2 Discord Cogs
 
-`src/app/presentation/bot/cogs/users_cog.py`:
+[`src/app/presentation/bot/cogs/users_cog.py`](../src/app/presentation/bot/cogs/users_cog.py):
 
 ```python
-class UsersCog(commands.Cog):
-    # ...
-    @users.command(name="get")
-    async def users_get(
-        self, ctx: commands.Context[commands.Bot], user_id: str
-    ) -> None:
-        """Get user by ID."""
-        query = GetUserQuery(user_id=user_id) # 文字列でQueryを作成
-        result = await Mediator.send_async(query)
-
-        match result:
-            case Ok(ok_value):
-                user = ok_value.user
-                await ctx.send(
-                    f"**User #{user.id}**\n"
-                    f"Name: {user.name}\n"
-                    f"Email: {user.email}"
-                )
-            case Err(err_value):
-                await ctx.send(f"❌ Error: {err_value.message}")
+query = GetUserQuery(user_id=user_id)
+message = await (
+    self.mediator.send_async(query)
+    .map(lambda value: f"User Information:\nID: {value.id}")
+    .unwrap()
+)
+await ctx.send(content=message)
 ```
 
 **ポイント**:
 
-- Mediator経由でユースケースを呼び出し
-- Result型でエラーハンドリング
+- `ApplicationMediator` 経由でユースケースを呼び出し
+- `Result` 型で成功と失敗を扱う
+- エラー表示には `UseCaseError.message` を使う
 - Discord用のメッセージフォーマット
 - IDは文字列として受け取る
 
@@ -675,14 +489,14 @@ class UsersCog(commands.Cog):
    ↓
 2. UsersCog: GetUserQuery(user_id="01H...")
    ↓
-3. Mediator -> GetUserHandler
+3. ApplicationMediator -> GetUserHandler
    ↓ UserId.from_primitive("01H...")
 4. UoW -> GenericRepository.get_by_id(UserId(...))
    ↓ SELECT ... WHERE id = "01H..."
 5. Database -> UserORM
    ↓ ORMMappingRegistry.from_orm()
-6. User (Domain) -> UserDTO
-   ↓ Ok(GetUserResult(UserDTO))
+6. User (Domain) -> GetUserResult
+   ↓ Ok(GetUserResult)
 7. UsersCog: formats message
    ↓
 8. User: receives message
@@ -695,22 +509,25 @@ class UsersCog(commands.Cog):
    ↓
 2. TeamsCog: CreateTeamCommand(name="My Team")
    ↓
-3. Mediator -> CreateTeamHandler -> Team(id=TeamId.generate(), ...)
+3. ApplicationMediator -> CreateTeamHandler -> Team(id=TeamId.generate(), ...)
    ↓ UoW -> GenericRepository.add()
 4. ORMMappingRegistry.to_orm() -> TeamORM
    ↓ INSERT ...
 5. Database commits
-   ↓ Ok(CreateTeamResult(team_id="01H..."))
+   ↓ Ok(CreateTeamResult(id="01H..."))
 6. TeamsCog: .and_then() is called
-   ↓ GetTeamQuery(team_id="01H...")
+   ↓ GetTeamQuery(id="01H...")
 7. (Queryフローと同様の処理)
-   ↓ Ok(GetTeamResult(TeamDTO))
+   ↓ Ok(GetTeamResult)
 8. TeamsCog: .map() formats message
    ↓
 9. User: receives success message
 ```
 
-**重要**: Create操作は作成したエンティティのIDのみを返します。詳細情報の取得は必ずGet操作を経由することで、表示ロジックが一元化され、SOLID原則（特にSRPとOCP）が守られます。`and_then` を使ったフローにより、この処理が簡潔に表現されます。
+Create操作は作成したエンティティのIDを返します。詳細情報が必要な場合は、
+Presentation層が同じ `ApplicationMediator` を通じてGet操作を続けて呼び出します。
+CreateとGetの結果をつなぐ実例は
+[`TeamsCog.teams_create`](../src/app/presentation/bot/cogs/teams_cog.py) にあります。
 
 ---
 
@@ -853,7 +670,7 @@ def init_orm_mappings() -> None:
 
 ```python
 # src/app/presentation/bot/cogs/guilds_cog.py
-# ... Mediator経由でユースケースを呼び出すコマンドを実装
+# ... ApplicationMediator経由でユースケースを呼び出すコマンドを実装
 ```
 
 ### データベースマイグレーション

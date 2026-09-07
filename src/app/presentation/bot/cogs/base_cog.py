@@ -6,6 +6,7 @@ from typing import Any
 
 from discord.ext import commands
 
+from app.application.mediator import ApplicationMediator
 from app.usecases.result import UseCaseError
 
 logger = logging.getLogger(__name__)
@@ -14,8 +15,9 @@ logger = logging.getLogger(__name__)
 class BaseCog(commands.Cog):
     """Base cog with common error handling."""
 
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: commands.Bot, mediator: ApplicationMediator) -> None:
         self.bot = bot
+        self.mediator = mediator
 
     async def cog_command_error(
         self, ctx: commands.Context[Any], error: Exception

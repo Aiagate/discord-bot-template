@@ -3,6 +3,10 @@
 import injector
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.application.mediator import (
+    ApplicationMediator,
+    create_application_mediator,
+)
 from app.contracts.ports import IChatHistoryQuery, IEventBus, IUnitOfWork
 from app.infrastructure.messaging.in_memory_event_bus import InMemoryEventBus
 from app.infrastructure.orm_registry import init_orm_mappings
@@ -50,6 +54,16 @@ class MessagingModule(injector.Module):
         return InMemoryEventBus()
 
 
+class ApplicationModule(injector.Module):
+    """Module for application-level orchestration services."""
+
+    @injector.provider
+    @injector.singleton
+    def provide_mediator(self, container: injector.Injector) -> ApplicationMediator:
+        """Provide the mediator with all application handlers registered."""
+        return create_application_mediator(container)
+
+
 def configure(binder: injector.Binder) -> None:
     """Configure dependency injection bindings."""
     # Initialize ORM mappings
@@ -57,3 +71,4 @@ def configure(binder: injector.Binder) -> None:
 
     binder.install(DatabaseModule())
     binder.install(MessagingModule())
+    binder.install(ApplicationModule())

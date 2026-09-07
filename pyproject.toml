@@ -10,7 +10,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "discord-py>=2.5.2",
     "fastapi>=0.124.4",
-    "flow-med>=0.1.1",
+    "flow-med>=0.2.0,<0.3.0",
     "flow-res==0.1.1",
     "injector>=0.22.0",
     "line-bot-sdk>=3.23.0",

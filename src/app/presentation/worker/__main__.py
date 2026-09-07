@@ -7,10 +7,10 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flow_med import Mediator
 from injector import Injector
 
 from app import container
+from app.application.mediator import ApplicationMediator
 from app.contracts.ports.event_bus import IEventBus
 from app.infrastructure.database import init_db
 
@@ -58,16 +58,16 @@ async def main() -> None:
     init_db(db_url, echo=True)
 
     injector = Injector([container.configure])
-
-    # Mediatorの初期化
-    Mediator.initialize(injector)
+    mediator = injector.get(ApplicationMediator)
 
     # 2. EventBusの取得
     event_bus = injector.get(IEventBus)
 
     # 3. ハンドラーと定期タスクの登録
-    import app.presentation.worker.handlers as _  # type: ignore[reportUnusedImport] # noqa: F401
+    import app.presentation.worker.handlers as worker_handlers  # noqa: F401
     from app.presentation.worker.registry import registry
+
+    worker_handlers.configure_mediator(mediator)
 
     # イベントハンドラーの登録
     for topic, handler in registry.registered_handlers:

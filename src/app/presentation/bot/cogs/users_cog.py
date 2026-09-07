@@ -3,7 +3,6 @@
 """Discord cog for user management commands."""
 
 from discord.ext import commands
-from flow_med import Mediator
 
 from app.presentation.bot.cogs.base_cog import BaseCog
 from app.usecases.users.create_user import CreateUserCommand
@@ -30,7 +29,7 @@ class UsersCog(BaseCog, name="Users"):
         query = GetUserQuery(user_id=id)
 
         message = await (
-            Mediator.send_async(query)
+            self.mediator.send_async(query)
             .map(
                 lambda value: (
                     f"User Information:\n"
@@ -53,11 +52,11 @@ class UsersCog(BaseCog, name="Users"):
     ) -> None:
         """Create new user. Usage: !users create <name> <email>"""
         message = await (
-            Mediator.send_async(
+            self.mediator.send_async(
                 CreateUserCommand(display_name=display_name, email=email)
             )
             .and_then(
-                lambda result: Mediator.send_async(GetUserQuery(user_id=result.id))
+                lambda result: self.mediator.send_async(GetUserQuery(user_id=result.id))
             )
             .map(
                 lambda value: (

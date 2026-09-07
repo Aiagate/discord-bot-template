@@ -3,12 +3,18 @@
 import logging
 from collections.abc import Mapping
 
-from flow_med import Mediator
-
+from app.application.mediator import ApplicationMediator
 from app.presentation.worker.registry import event_handler, scheduled_task
 from app.usecases.users.welcome_user import WelcomeUserCommand
 
 logger = logging.getLogger(__name__)
+_mediator: ApplicationMediator | None = None
+
+
+def configure_mediator(mediator: ApplicationMediator) -> None:
+    """Configure the mediator used by worker event handlers."""
+    global _mediator
+    _mediator = mediator
 
 
 @event_handler("user.created")
@@ -18,8 +24,10 @@ async def on_user_created(payload: Mapping[str, object]) -> None:
     if not isinstance(user_id, str) or not user_id:
         return
 
-    # Mediatorを介してUseCaseを実行
-    await Mediator.send_async(WelcomeUserCommand(user_id=user_id))
+    if _mediator is None:
+        raise RuntimeError("Worker mediator has not been configured")
+
+    await _mediator.send_async(WelcomeUserCommand(user_id=user_id))
 
 
 @event_handler("example.topic")

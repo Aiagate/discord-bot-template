@@ -3,7 +3,6 @@
 # pyright: reportUnknownLambdaType=false
 
 from discord.ext import commands
-from flow_med import Mediator
 
 from app.presentation.bot.cogs.base_cog import BaseCog
 from app.usecases.memberships.join_team import JoinTeamCommand
@@ -33,7 +32,7 @@ class TeamsCog(BaseCog, name="Teams"):
         query = GetTeamQuery(id=id)
 
         message = await (
-            Mediator.send_async(query)
+            self.mediator.send_async(query)
             .map(  # type: ignore[arg-type, return-value]  # pyright: ignore[reportUnknownLambdaType]
                 lambda value: (f"Team Information:\nID: {value.id}\nName: {value.name}")
             )
@@ -50,9 +49,9 @@ class TeamsCog(BaseCog, name="Teams"):
     ) -> None:
         """Create new team. Usage: !teams create <name>"""
         message = await (
-            Mediator.send_async(CreateTeamCommand(name=name))
+            self.mediator.send_async(CreateTeamCommand(name=name))
             .and_then(  # type: ignore[arg-type, return-value]
-                lambda result: Mediator.send_async(GetTeamQuery(id=result.id))
+                lambda result: self.mediator.send_async(GetTeamQuery(id=result.id))
             )
             .map(  # type: ignore[arg-type, return-value]
                 lambda value: (f"Team Created:\nID: {value.id}\nName: {value.name}")
@@ -72,9 +71,11 @@ class TeamsCog(BaseCog, name="Teams"):
     ) -> None:
         """Update team name. Usage: !teams update <team_id> <new_name>"""
         message = await (
-            Mediator.send_async(UpdateTeamCommand(team_id=team_id, new_name=new_name))
+            self.mediator.send_async(
+                UpdateTeamCommand(team_id=team_id, new_name=new_name)
+            )
             .and_then(  # type: ignore[arg-type, return-value]
-                lambda result: Mediator.send_async(GetTeamQuery(id=result.id))
+                lambda result: self.mediator.send_async(GetTeamQuery(id=result.id))
             )
             .map(  # type: ignore[arg-type, return-value]
                 lambda value: (
@@ -98,7 +99,7 @@ class TeamsCog(BaseCog, name="Teams"):
     ) -> None:
         """Join a team immediately. Usage: !teams join <team_id> <user_id>"""
         message = await (
-            Mediator.send_async(JoinTeamCommand(team_id=team_id, user_id=user_id))
+            self.mediator.send_async(JoinTeamCommand(team_id=team_id, user_id=user_id))
             .map(
                 lambda value: (
                     f"Joined Team Successfully:\n"
@@ -120,7 +121,7 @@ class TeamsCog(BaseCog, name="Teams"):
     ) -> None:
         """Request to join a team. Usage: !teams request <team_id> <user_id>"""
         message = await (
-            Mediator.send_async(
+            self.mediator.send_async(
                 RequestJoinTeamCommand(team_id=team_id, user_id=user_id)
             )
             .map(

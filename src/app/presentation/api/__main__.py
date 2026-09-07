@@ -5,10 +5,10 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from flow_med import Mediator
 from injector import Injector
 
 from app import container
+from app.application.mediator import ApplicationMediator
 from app.infrastructure.database import init_db
 from app.presentation.api.routers import teams, users
 
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # 2. Initialize Dependency Injection & Mediator
     # We use the same container configuration as the Discord Bot
     injector = Injector([container.configure])
-    Mediator.initialize(injector)
+    app.state.mediator = injector.get(ApplicationMediator)
 
     logger.info("Application initialized successfully")
 
