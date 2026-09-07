@@ -6,10 +6,10 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from pprint import pformat
+from typing import cast
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from flow_med import Mediator
 from flow_res import is_err
 from injector import Injector
 from linebot.v3.exceptions import InvalidSignatureError
@@ -30,6 +30,7 @@ from linebot.v3.webhooks import (
 )
 
 from app import container
+from app.application.mediator import ApplicationMediator
 from app.domain.value_objects.conversation_scope import LineConversationScope
 from app.infrastructure.database import init_db
 from app.usecases.chat.save_line_chat import SaveLineChatCommand
@@ -82,7 +83,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./bot.db")
     init_db(db_url, echo=True)
     injector = Injector([container.configure])
-    Mediator.initialize(injector)
+    app.state.mediator = injector.get(ApplicationMediator)
 
     async_api_client = AsyncApiClient(configuration)
     app.state.line_bot_api = AsyncMessagingApi(async_api_client)
@@ -162,7 +163,11 @@ async def handle_callback(request: Request):
                         logger.warning("LINE message source has no sender identity")
                         continue
 
-                    save_result = await Mediator.send_async(
+                    mediator = cast(
+                        ApplicationMediator,
+                        request.app.state.mediator,
+                    )
+                    save_result = await mediator.send_async(
                         SaveLineChatCommand(
                             external_sender_id=sender_id,
                             conversation_scope=conversation_scope,

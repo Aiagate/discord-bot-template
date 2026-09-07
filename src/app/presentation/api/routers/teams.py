@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException
-from flow_med import Mediator
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
 from flow_res import is_err
 from pydantic import BaseModel
 
+from app.application.mediator import ApplicationMediator
+from app.presentation.api.dependencies import get_mediator
 from app.usecases.teams.create_team import CreateTeamCommand
 from app.usecases.teams.get_team import GetTeamQuery
 from app.usecases.teams.update_team import UpdateTeamCommand
@@ -29,15 +32,17 @@ class UpdateTeamRequest(BaseModel):
 
 
 @router.post("", response_model=CreateTeamResponse)
-async def create_team(request: CreateTeamRequest) -> CreateTeamResponse:
+async def create_team(
+    request: CreateTeamRequest,
+    mediator: Annotated[ApplicationMediator, Depends(get_mediator)],
+) -> CreateTeamResponse:
     """Create a new team."""
     command = CreateTeamCommand(name=request.name)
 
     # Mediator returns a AwaitableResult, which we await to get the Result
-    result = await Mediator.send_async(command)
+    result = await mediator.send_async(command)
 
     if is_err(result):
-        # In a real app, you would map ErrorType to status codes
         raise HTTPException(status_code=400, detail=result.error.message)
 
     team_id = result.unwrap().id
@@ -45,10 +50,13 @@ async def create_team(request: CreateTeamRequest) -> CreateTeamResponse:
 
 
 @router.get("/{team_id}", response_model=TeamResponse)
-async def get_team(team_id: str) -> TeamResponse:
+async def get_team(
+    team_id: str,
+    mediator: Annotated[ApplicationMediator, Depends(get_mediator)],
+) -> TeamResponse:
     """Get a team by ID."""
     query = GetTeamQuery(id=team_id)
-    result = await Mediator.send_async(query)
+    result = await mediator.send_async(query)
 
     if is_err(result):
         raise HTTPException(status_code=404, detail=result.error.message)
@@ -63,10 +71,14 @@ async def get_team(team_id: str) -> TeamResponse:
 
 
 @router.put("/{team_id}", response_model=CreateTeamResponse)
-async def update_team(team_id: str, request: UpdateTeamRequest) -> CreateTeamResponse:
+async def update_team(
+    team_id: str,
+    request: UpdateTeamRequest,
+    mediator: Annotated[ApplicationMediator, Depends(get_mediator)],
+) -> CreateTeamResponse:
     """Update a team's name."""
     command = UpdateTeamCommand(team_id=team_id, new_name=request.name)
-    result = await Mediator.send_async(command)
+    result = await mediator.send_async(command)
 
     if is_err(result):
         raise HTTPException(status_code=400, detail=result.error.message)
