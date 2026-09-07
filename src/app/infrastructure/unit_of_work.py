@@ -1,5 +1,6 @@
 """SQLAlchemy Unit of Work implementation."""
 
+import logging
 from typing import Any, overload
 
 from flow_res import Err, Ok, Result
@@ -14,6 +15,8 @@ from app.domain.repositories import (
     RepositoryErrorType,
 )
 from app.infrastructure.repositories.generic_repository import GenericRepository
+
+logger = logging.getLogger(__name__)
 
 
 class SQLAlchemyUnitOfWork(IUnitOfWork):
@@ -67,9 +70,13 @@ class SQLAlchemyUnitOfWork(IUnitOfWork):
         try:
             await self._session.commit()
             return Ok(None)
-        except SQLAlchemyError as e:
+        except SQLAlchemyError as error:
+            logger.exception("Database error occurred in commit")
             return Err(
-                RepositoryError(type=RepositoryErrorType.UNEXPECTED, message=str(e))
+                RepositoryError(
+                    type=RepositoryErrorType.UNEXPECTED,
+                    message=str(error),
+                )
             )
 
     async def rollback(self) -> None:

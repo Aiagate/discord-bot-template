@@ -71,7 +71,7 @@ async def test_create_user_handler_repository_error(event_bus: AsyncMock) -> Non
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.UNEXPECTED
+    assert result.error.type == RepositoryErrorType.UNEXPECTED
     assert "Database connection failed" in result.error.message
 
 

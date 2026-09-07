@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 
 from flow_med import Request, RequestHandler
-from flow_res import Ok, Result, combine_all, is_err
+from flow_res import Err, Ok, Result, combine_all, is_err
 from injector import inject
 
 from app.contracts.messages import USER_CREATED_TOPIC, UserCreatedEvent
@@ -13,7 +13,11 @@ from app.contracts.ports import IUnitOfWork
 from app.contracts.ports.event_bus import IEventBus
 from app.domain.aggregates.user import User
 from app.domain.value_objects import DisplayName, Email
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +28,7 @@ class CreateUserResult:
 
 
 @dataclass(frozen=True)
-class CreateUserCommand(Request[Result[CreateUserResult, UseCaseError]]):
+class CreateUserCommand(Request[Result[CreateUserResult, UseCaseResultError]]):
     """Command to create new user."""
 
     display_name: str
@@ -32,7 +36,7 @@ class CreateUserCommand(Request[Result[CreateUserResult, UseCaseError]]):
 
 
 class CreateUserHandler(
-    RequestHandler[CreateUserCommand, Result[CreateUserResult, UseCaseError]]
+    RequestHandler[CreateUserCommand, Result[CreateUserResult, UseCaseResultError]]
 ):
     """Handler for CreateUser command."""
 
@@ -43,7 +47,7 @@ class CreateUserHandler(
 
     async def handle(
         self, request: CreateUserCommand
-    ) -> Result[CreateUserResult, UseCaseError]:
+    ) -> Result[CreateUserResult, UseCaseResultError]:
         """Create new user and return as DTO within a Result."""
         email_result = Email.from_primitive(request.email)
         display_name_result = DisplayName.from_primitive(request.display_name)
@@ -55,7 +59,7 @@ class CreateUserHandler(
             )
         )
         if is_err(combined_result):
-            return combined_result
+            return Err(combined_result.error)
 
         email, display_name = combined_result.unwrap()
 
@@ -63,19 +67,15 @@ class CreateUserHandler(
 
         async with self._uow:
             user_repo = self._uow.GetRepository(User)
-            add_result = (await user_repo.add(user)).map_err(
-                lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=e.message)
-            )
+            add_result = await user_repo.add(user)
 
             if is_err(add_result):
-                return add_result
+                return Err(add_result.error)
 
-            commit_result = (await self._uow.commit()).map_err(
-                lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=e.message)
-            )
+            commit_result = await self._uow.commit()
 
             if is_err(commit_result):
-                return commit_result
+                return Err(commit_result.error)
 
             user_id = user.id.to_primitive()
 

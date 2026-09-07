@@ -92,5 +92,5 @@ async def test_create_team_handler_repository_error() -> None:
     result = await handler.handle(command)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.UNEXPECTED
+    assert result.error.type == RepositoryErrorType.UNEXPECTED
     assert "Database connection failed" in result.error.message

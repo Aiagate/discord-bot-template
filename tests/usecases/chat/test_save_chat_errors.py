@@ -29,8 +29,8 @@ def _mock_uow(repository: object) -> IUnitOfWork:
 
 
 @pytest.mark.anyio
-async def test_discord_save_maps_repository_error() -> None:
-    """A repository failure becomes a use-case error."""
+async def test_discord_save_propagates_repository_error() -> None:
+    """A repository failure remains internal until the application boundary."""
     repository = MagicMock()
     repository.add = AsyncMock(
         return_value=Err(
@@ -53,12 +53,12 @@ async def test_discord_save_maps_repository_error() -> None:
     )
 
     assert is_err(result)
-    assert result.error.type is ErrorType.UNEXPECTED
+    assert result.error.type is RepositoryErrorType.UNEXPECTED
 
 
 @pytest.mark.anyio
-async def test_line_save_maps_commit_error() -> None:
-    """A commit failure becomes a use-case error."""
+async def test_line_save_propagates_commit_error() -> None:
+    """A commit failure remains internal until the application boundary."""
     repository = MagicMock()
     message = ChatMessage.create_line(
         conversation_scope=LineConversationScope.group("group-1"),
@@ -88,7 +88,7 @@ async def test_line_save_maps_commit_error() -> None:
     )
 
     assert is_err(result)
-    assert result.error.type is ErrorType.UNEXPECTED
+    assert result.error.type is RepositoryErrorType.UNEXPECTED
 
 
 @pytest.mark.anyio

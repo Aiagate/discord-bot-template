@@ -1,11 +1,16 @@
 """Tests for infrastructure Unit of Work component."""
 
+import logging
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from flow_res import is_ok
+from flow_res import is_err, is_ok
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.user import User
 from app.domain.value_objects import DisplayName, Email, UserId
+from app.infrastructure.unit_of_work import SQLAlchemyUnitOfWork
 
 
 @pytest.mark.anyio
@@ -56,3 +61,25 @@ async def test_uow_rollback(uow: IUnitOfWork) -> None:
         assert is_ok(retrieved_result)
         retrieved_user = retrieved_result.value
         assert retrieved_user.email.to_primitive() == "rollback@example.com"
+
+
+@pytest.mark.anyio
+async def test_uow_commit_logs_database_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Commit failures keep a diagnostic record before becoming Result errors."""
+    session = MagicMock()
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+    session.commit = AsyncMock(side_effect=SQLAlchemyError("commit failed"))
+    session_factory = MagicMock(return_value=session)
+    uow = SQLAlchemyUnitOfWork(session_factory)
+
+    with caplog.at_level(logging.ERROR, logger="app.infrastructure.unit_of_work"):
+        async with uow:
+            result = await uow.commit()
+
+    assert is_err(result)
+    assert result.error.message == "commit failed"
+    assert "Database error occurred in commit" in caplog.text
+    assert "commit failed" in caplog.text

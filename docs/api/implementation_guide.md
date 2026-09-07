@@ -52,8 +52,8 @@ async def create_team(
     result = await mediator.send_async(CreateTeamCommand(name=request.name))
     if is_err(result):
         raise HTTPException(
-            status_code=400,
-            detail=result.error.message,
+            status_code=http_status_for_error(result.error.type),
+            detail=result.error.display_message,
         )
     return CreateTeamResponse(id=result.unwrap().id)
 ```
@@ -110,8 +110,12 @@ Use Case から返却される `Result` 型 (`Ok` / `Err`) をハンドリング
 
 * **Validation Error** -> 400 Bad Request
 * **Not Found** -> 404 Not Found
-* **Unexpected / System Error** -> 400 Bad Request（現行エンドポイントの既定値）
+* **Conflict / Concurrency Conflict** -> 409 Conflict
+* **Unexpected / System Error** -> 500 Internal Server Error
 
-Handlerは `UseCaseError` を返します。API層は `Result` を分岐し、エンドポイントの
-契約に応じたHTTPステータスと `UseCaseError.message` をレスポンスへ変換します。
-例外 (`try-except`) ではなく、`Result` 型の分岐で制御してください。
+Handlerは `RepositoryError | UseCaseError` を返します。ApplicationMediatorの境界で
+`classify_error` を一度だけ適用し、API層は `UseCaseError.type` をHTTPステータスへ、
+`display_message` をレスポンスのdetailへ変換します。分類の実装は
+[`src/app/usecases/error_mapping.py`](../../src/app/usecases/error_mapping.py)、HTTPの
+対応表は [`src/app/presentation/api/error_mapping.py`](../../src/app/presentation/api/error_mapping.py)
+にあります。例外 (`try-except`) ではなく、`Result` 型の分岐で制御してください。

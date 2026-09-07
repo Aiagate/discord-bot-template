@@ -5,6 +5,7 @@ from flow_res import is_err
 from ulid import ULID
 
 from app.contracts.ports import IUnitOfWork
+from app.domain.repositories import RepositoryErrorType
 from app.usecases.memberships.request_join_team import (
     RequestJoinTeamCommand,
     RequestJoinTeamHandler,
@@ -45,8 +46,8 @@ async def test_request_join_team_not_found(uow: IUnitOfWork) -> None:
         RequestJoinTeamCommand(team_id=valid_id, user_id=valid_id)
     )
     assert is_err(res1)
-    assert res1.error.type == ErrorType.NOT_FOUND
-    assert res1.error.message == "Team not found"
+    assert res1.error.type == RepositoryErrorType.NOT_FOUND
+    assert "not found" in res1.error.message
 
     # User not found (mock team existence via creating one)
     from app.usecases.teams.create_team import CreateTeamCommand, CreateTeamHandler
@@ -58,5 +59,5 @@ async def test_request_join_team_not_found(uow: IUnitOfWork) -> None:
         RequestJoinTeamCommand(team_id=team_id, user_id=valid_id)
     )
     assert is_err(res2)
-    assert res2.error.type == ErrorType.NOT_FOUND
-    assert res2.error.message == "User not found"
+    assert res2.error.type == RepositoryErrorType.NOT_FOUND
+    assert "not found" in res2.error.message

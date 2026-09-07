@@ -4,39 +4,19 @@ import logging
 from dataclasses import dataclass
 
 from flow_med import Request, RequestHandler
-from flow_res import Ok, Result, combine_all, is_err
+from flow_res import Err, Ok, Result, combine_all, is_err
 from injector import inject
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.team import Team
-from app.domain.repositories import RepositoryError, RepositoryErrorType
 from app.domain.value_objects import TeamId, TeamName
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
-
-
-def _map_get_error(repo_error: RepositoryError, team_id: str) -> UseCaseError:
-    """Map repository get errors to use case errors."""
-    if repo_error.type == RepositoryErrorType.NOT_FOUND:
-        return UseCaseError(
-            type=ErrorType.NOT_FOUND,
-            message=f"Team with id {team_id} not found",
-        )
-    return UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
-
-
-def _map_update_error(repo_error: RepositoryError, team_id: str) -> UseCaseError:
-    """Map repository update errors to use case errors."""
-    if repo_error.type == RepositoryErrorType.VERSION_CONFLICT:
-        return UseCaseError(
-            type=ErrorType.CONCURRENCY_CONFLICT,
-            message=(
-                f"Team with id {team_id} was modified by another user. "
-                "Please reload and try again."
-            ),
-        )
-    return UseCaseError(type=ErrorType.UNEXPECTED, message=repo_error.message)
 
 
 @dataclass(frozen=True)
@@ -45,7 +25,7 @@ class UpdateTeamResult:
 
 
 @dataclass(frozen=True)
-class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseError]]):
+class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseResultError]]):
     """Command to update team name."""
 
     team_id: str
@@ -53,7 +33,7 @@ class UpdateTeamCommand(Request[Result[UpdateTeamResult, UseCaseError]]):
 
 
 class UpdateTeamHandler(
-    RequestHandler[UpdateTeamCommand, Result[UpdateTeamResult, UseCaseError]]
+    RequestHandler[UpdateTeamCommand, Result[UpdateTeamResult, UseCaseResultError]]
 ):
     """Handler for UpdateTeam command."""
 
@@ -63,7 +43,7 @@ class UpdateTeamHandler(
 
     async def handle(
         self, request: UpdateTeamCommand
-    ) -> Result[UpdateTeamResult, UseCaseError]:
+    ) -> Result[UpdateTeamResult, UseCaseResultError]:
         """Update team name and return updated team info within a Result."""
         # Validate inputs
         team_id_result = TeamId.from_primitive(request.team_id)
@@ -76,7 +56,7 @@ class UpdateTeamHandler(
             )
         )
         if is_err(combined_result):
-            return combined_result
+            return Err(combined_result.error)
 
         team_id, new_team_name = combined_result.unwrap()
 
@@ -84,11 +64,9 @@ class UpdateTeamHandler(
             team_repo = self._uow.GetRepository(Team, TeamId)
 
             # Get existing team
-            get_result = (await team_repo.get_by_id(team_id)).map_err(
-                lambda e: _map_get_error(e, request.team_id)
-            )
+            get_result = await team_repo.get_by_id(team_id)
             if is_err(get_result):
-                return get_result
+                return Err(get_result.error)
 
             team = get_result.unwrap()
 
@@ -96,19 +74,15 @@ class UpdateTeamHandler(
             team.change_name(new_team_name)
 
             # Save updated team (optimistic locking happens here)
-            update_result = (await team_repo.update(team)).map_err(
-                lambda e: _map_update_error(e, request.team_id)
-            )
+            update_result = await team_repo.update(team)
             if is_err(update_result):
-                return update_result
+                return Err(update_result.error)
 
             # Commit transaction
-            commit_result = (await self._uow.commit()).map_err(
-                lambda e: UseCaseError(type=ErrorType.UNEXPECTED, message=e.message)
-            )
+            commit_result = await self._uow.commit()
 
             if is_err(commit_result):
-                return commit_result
+                return Err(commit_result.error)
 
             updated_team = update_result.unwrap()
 

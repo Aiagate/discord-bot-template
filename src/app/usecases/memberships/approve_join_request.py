@@ -13,7 +13,11 @@ from app.domain.aggregates.team_membership import (
     TeamMembership,
 )
 from app.domain.value_objects import MembershipId
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +32,7 @@ class ApproveJoinRequestResult:
 
 @dataclass(frozen=True)
 class ApproveJoinRequestCommand(
-    Request[Result[ApproveJoinRequestResult, UseCaseError]]
+    Request[Result[ApproveJoinRequestResult, UseCaseResultError]]
 ):
     """Command to approve a join request."""
 
@@ -37,7 +41,8 @@ class ApproveJoinRequestCommand(
 
 class ApproveJoinRequestHandler(
     RequestHandler[
-        ApproveJoinRequestCommand, Result[ApproveJoinRequestResult, UseCaseError]
+        ApproveJoinRequestCommand,
+        Result[ApproveJoinRequestResult, UseCaseResultError],
     ]
 ):
     """Handler for ApproveJoinRequest command."""
@@ -48,7 +53,7 @@ class ApproveJoinRequestHandler(
 
     async def handle(
         self, request: ApproveJoinRequestCommand
-    ) -> Result[ApproveJoinRequestResult, UseCaseError]:
+    ) -> Result[ApproveJoinRequestResult, UseCaseResultError]:
         """Approve a join request."""
         membership_id_result = MembershipId.from_primitive(request.membership_id)
 
@@ -67,11 +72,7 @@ class ApproveJoinRequestHandler(
 
             membership_result = await membership_repo.get_by_id(membership_id)
             if is_err(membership_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.NOT_FOUND, message="Membership not found"
-                    )
-                )
+                return Err(membership_result.error)
 
             membership = membership_result.unwrap()
 
@@ -87,19 +88,11 @@ class ApproveJoinRequestHandler(
 
             update_result = await membership_repo.update(membership)
             if is_err(update_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=update_result.error.message
-                    )
-                )
+                return Err(update_result.error)
 
             commit_result = await self._uow.commit()
             if is_err(commit_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=commit_result.error.message
-                    )
-                )
+                return Err(commit_result.error)
 
             return Ok(
                 ApproveJoinRequestResult(

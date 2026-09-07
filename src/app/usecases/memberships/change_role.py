@@ -13,7 +13,11 @@ from app.domain.aggregates.team_membership import (
     TeamMembership,
 )
 from app.domain.value_objects import MembershipId, MembershipRole
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +31,7 @@ class ChangeRoleResult:
 
 
 @dataclass(frozen=True)
-class ChangeRoleCommand(Request[Result[ChangeRoleResult, UseCaseError]]):
+class ChangeRoleCommand(Request[Result[ChangeRoleResult, UseCaseResultError]]):
     """Command to change a member's role."""
 
     membership_id: str
@@ -35,7 +39,7 @@ class ChangeRoleCommand(Request[Result[ChangeRoleResult, UseCaseError]]):
 
 
 class ChangeRoleHandler(
-    RequestHandler[ChangeRoleCommand, Result[ChangeRoleResult, UseCaseError]]
+    RequestHandler[ChangeRoleCommand, Result[ChangeRoleResult, UseCaseResultError]]
 ):
     """Handler for ChangeRole command."""
 
@@ -45,7 +49,7 @@ class ChangeRoleHandler(
 
     async def handle(
         self, request: ChangeRoleCommand
-    ) -> Result[ChangeRoleResult, UseCaseError]:
+    ) -> Result[ChangeRoleResult, UseCaseResultError]:
         """Change a member's role."""
         membership_id_result = MembershipId.from_primitive(request.membership_id)
         new_role_result = MembershipRole.from_primitive(request.new_role)
@@ -73,11 +77,7 @@ class ChangeRoleHandler(
 
             membership_result = await membership_repo.get_by_id(membership_id)
             if is_err(membership_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.NOT_FOUND, message="Membership not found"
-                    )
-                )
+                return Err(membership_result.error)
 
             membership = membership_result.unwrap()
 
@@ -93,19 +93,11 @@ class ChangeRoleHandler(
 
             update_result = await membership_repo.update(membership)
             if is_err(update_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=update_result.error.message
-                    )
-                )
+                return Err(update_result.error)
 
             commit_result = await self._uow.commit()
             if is_err(commit_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=commit_result.error.message
-                    )
-                )
+                return Err(commit_result.error)
 
             return Ok(
                 ChangeRoleResult(

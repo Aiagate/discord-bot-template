@@ -7,6 +7,7 @@ from flow_res import is_err, is_ok
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.team_membership import TeamMembership
+from app.domain.repositories import RepositoryErrorType
 from app.domain.value_objects import MembershipId
 from app.usecases.memberships.join_team import JoinTeamCommand, JoinTeamHandler
 from app.usecases.memberships.leave_team import LeaveTeamCommand, LeaveTeamHandler
@@ -14,7 +15,6 @@ from app.usecases.memberships.request_join_team import (
     RequestJoinTeamCommand,
     RequestJoinTeamHandler,
 )
-from app.usecases.result import ErrorType
 from app.usecases.teams.create_team import CreateTeamCommand, CreateTeamHandler
 from app.usecases.users.create_user import CreateUserCommand, CreateUserHandler
 
@@ -53,7 +53,7 @@ async def test_duplicate_immediate_join_returns_conflict(
 
     assert is_ok(first)
     assert is_err(second)
-    assert second.error.type is ErrorType.CONFLICT
+    assert second.error.type is RepositoryErrorType.ALREADY_EXISTS
 
 
 @pytest.mark.anyio
@@ -70,7 +70,7 @@ async def test_duplicate_join_request_returns_conflict(
 
     assert is_ok(first)
     assert is_err(second)
-    assert second.error.type is ErrorType.CONFLICT
+    assert second.error.type is RepositoryErrorType.ALREADY_EXISTS
 
 
 @pytest.mark.anyio

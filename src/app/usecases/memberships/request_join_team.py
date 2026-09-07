@@ -11,9 +11,12 @@ from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.team import Team
 from app.domain.aggregates.team_membership import TeamMembership
 from app.domain.aggregates.user import User
-from app.domain.repositories import RepositoryErrorType
 from app.domain.value_objects import TeamId, UserId
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,9 @@ class RequestJoinTeamResult:
 
 
 @dataclass(frozen=True)
-class RequestJoinTeamCommand(Request[Result[RequestJoinTeamResult, UseCaseError]]):
+class RequestJoinTeamCommand(
+    Request[Result[RequestJoinTeamResult, UseCaseResultError]]
+):
     """Command to request to join a team."""
 
     team_id: str
@@ -37,7 +42,9 @@ class RequestJoinTeamCommand(Request[Result[RequestJoinTeamResult, UseCaseError]
 
 
 class RequestJoinTeamHandler(
-    RequestHandler[RequestJoinTeamCommand, Result[RequestJoinTeamResult, UseCaseError]]
+    RequestHandler[
+        RequestJoinTeamCommand, Result[RequestJoinTeamResult, UseCaseResultError]
+    ]
 ):
     """Handler for RequestJoinTeam command."""
 
@@ -47,7 +54,7 @@ class RequestJoinTeamHandler(
 
     async def handle(
         self, request: RequestJoinTeamCommand
-    ) -> Result[RequestJoinTeamResult, UseCaseError]:
+    ) -> Result[RequestJoinTeamResult, UseCaseResultError]:
         """User requests to join a team."""
         team_id_result = TeamId.from_primitive(request.team_id)
         user_id_result = UserId.from_primitive(request.user_id)
@@ -76,45 +83,23 @@ class RequestJoinTeamHandler(
             # Check if team exists
             team_exists = await team_repo.get_by_id(team_id)
             if is_err(team_exists):
-                return Err(
-                    UseCaseError(type=ErrorType.NOT_FOUND, message="Team not found")
-                )
+                return Err(team_exists.error)
 
             # Check if user exists
             user_exists = await user_repo.get_by_id(user_id)
             if is_err(user_exists):
-                return Err(
-                    UseCaseError(type=ErrorType.NOT_FOUND, message="User not found")
-                )
+                return Err(user_exists.error)
 
             # Create request join aggregate
             membership = TeamMembership.request_join(team_id=team_id, user_id=user_id)
 
             add_result = await membership_repo.add(membership)
             if is_err(add_result):
-                if add_result.error.type == RepositoryErrorType.ALREADY_EXISTS:
-                    return Err(
-                        UseCaseError(
-                            type=ErrorType.CONFLICT,
-                            message=(
-                                "User already has a PENDING or ACTIVE membership "
-                                "for this team"
-                            ),
-                        )
-                    )
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=add_result.error.message
-                    )
-                )
+                return Err(add_result.error)
 
             commit_result = await self._uow.commit()
             if is_err(commit_result):
-                return Err(
-                    UseCaseError(
-                        type=ErrorType.UNEXPECTED, message=commit_result.error.message
-                    )
-                )
+                return Err(commit_result.error)
 
             return Ok(
                 RequestJoinTeamResult(

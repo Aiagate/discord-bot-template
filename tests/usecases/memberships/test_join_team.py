@@ -5,6 +5,7 @@ from flow_res import is_err
 from ulid import ULID
 
 from app.contracts.ports import IUnitOfWork
+from app.domain.repositories import RepositoryErrorType
 from app.usecases.memberships.join_team import (
     JoinTeamCommand,
     JoinTeamHandler,
@@ -41,8 +42,8 @@ async def test_join_team_not_found(uow: IUnitOfWork) -> None:
     # Implementation checks ID format first, then logic. Here ID is valid format but not in DB.
     # Note: Logic checks Team existence first.
     assert is_err(res1)
-    assert res1.error.type == ErrorType.NOT_FOUND
-    assert res1.error.message == "Team not found"
+    assert res1.error.type == RepositoryErrorType.NOT_FOUND
+    assert "not found" in res1.error.message
 
     # User not found (would need to create team first to pass team check)
     # But since we can't easily mock inner calls without complex setup,
@@ -56,5 +57,5 @@ async def test_join_team_not_found(uow: IUnitOfWork) -> None:
 
     res2 = await handler.handle(JoinTeamCommand(team_id=team_id, user_id=valid_id))
     assert is_err(res2)
-    assert res2.error.type == ErrorType.NOT_FOUND
-    assert res2.error.message == "User not found"
+    assert res2.error.type == RepositoryErrorType.NOT_FOUND
+    assert "not found" in res2.error.message

@@ -5,8 +5,8 @@ from flow_res import is_err, is_ok
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.user import User
+from app.domain.repositories import RepositoryErrorType
 from app.domain.value_objects import DisplayName, Email
-from app.usecases.result import ErrorType
 from app.usecases.users.get_user import GetUserHandler, GetUserQuery
 
 
@@ -50,4 +50,4 @@ async def test_get_user_handler_not_found(uow: IUnitOfWork) -> None:
     result = await handler.handle(query)
 
     assert is_err(result)
-    assert result.error.type == ErrorType.NOT_FOUND
+    assert result.error.type == RepositoryErrorType.NOT_FOUND

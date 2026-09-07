@@ -4,13 +4,17 @@ import logging
 from dataclasses import dataclass
 
 from flow_med import Request, RequestHandler
-from flow_res import Ok, Result, is_err
+from flow_res import Err, Ok, Result, is_err
 from injector import inject
 
 from app.contracts.ports import IUnitOfWork
 from app.domain.aggregates.team import Team
 from app.domain.value_objects import TeamId
-from app.usecases.result import ErrorType, UseCaseError
+from app.usecases.result import (
+    ErrorType,
+    UseCaseError,
+    UseCaseResultError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +29,15 @@ class GetTeamResult:
 
 
 @dataclass(frozen=True)
-class GetTeamQuery(Request[Result[GetTeamResult, UseCaseError]]):
+class GetTeamQuery(Request[Result[GetTeamResult, UseCaseResultError]]):
     """Query to get team by ID."""
 
     id: str
 
 
-class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseError]]):
+class GetTeamHandler(
+    RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseResultError]]
+):
     """Handler for GetTeam query."""
 
     @inject
@@ -40,7 +46,7 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
 
     async def handle(
         self, request: GetTeamQuery
-    ) -> Result[GetTeamResult, UseCaseError]:
+    ) -> Result[GetTeamResult, UseCaseResultError]:
         """Get team by ID, returning a flattened result."""
         team_id_result = TeamId.from_primitive(request.id).map_err(
             lambda _: UseCaseError(
@@ -49,18 +55,16 @@ class GetTeamHandler(RequestHandler[GetTeamQuery, Result[GetTeamResult, UseCaseE
             )
         )
         if is_err(team_id_result):
-            return team_id_result
+            return Err(team_id_result.error)
 
         team_id = team_id_result.unwrap()
 
         async with self._uow:
             team_repo = self._uow.GetRepository(Team, TeamId)
-            team_result = (await team_repo.get_by_id(team_id)).map_err(
-                lambda e: UseCaseError(type=ErrorType.NOT_FOUND, message=e.message)
-            )
+            team_result = await team_repo.get_by_id(team_id)
 
             if is_err(team_result):
-                return team_result
+                return Err(team_result.error)
 
             team = team_result.unwrap()
             return Ok(

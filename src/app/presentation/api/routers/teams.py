@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.application.mediator import ApplicationMediator
 from app.presentation.api.dependencies import get_mediator
+from app.presentation.api.error_mapping import http_status_for_error
 from app.usecases.teams.create_team import CreateTeamCommand
 from app.usecases.teams.get_team import GetTeamQuery
 from app.usecases.teams.update_team import UpdateTeamCommand
@@ -43,7 +44,10 @@ async def create_team(
     result = await mediator.send_async(command)
 
     if is_err(result):
-        raise HTTPException(status_code=400, detail=result.error.message)
+        raise HTTPException(
+            status_code=http_status_for_error(result.error.type),
+            detail=result.error.display_message,
+        )
 
     team_id = result.unwrap().id
     return CreateTeamResponse(id=team_id)
@@ -59,7 +63,10 @@ async def get_team(
     result = await mediator.send_async(query)
 
     if is_err(result):
-        raise HTTPException(status_code=404, detail=result.error.message)
+        raise HTTPException(
+            status_code=http_status_for_error(result.error.type),
+            detail=result.error.display_message,
+        )
 
     team_result = result.unwrap()
 
@@ -81,7 +88,10 @@ async def update_team(
     result = await mediator.send_async(command)
 
     if is_err(result):
-        raise HTTPException(status_code=400, detail=result.error.message)
+        raise HTTPException(
+            status_code=http_status_for_error(result.error.type),
+            detail=result.error.display_message,
+        )
 
     updated_team_id = result.unwrap().id
     return CreateTeamResponse(id=updated_team_id)

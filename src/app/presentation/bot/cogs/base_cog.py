@@ -32,7 +32,7 @@ class BaseCog(commands.Cog):
                 command_name,
                 original_error.message,
             )
-            await ctx.send(f"Error: {original_error.message}")
+            await ctx.send(f"Error: {original_error.display_message}")
         elif isinstance(
             error, (commands.MissingRequiredArgument, commands.BadArgument)
         ):
